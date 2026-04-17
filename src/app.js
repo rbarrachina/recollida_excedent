@@ -29,7 +29,6 @@ const dashboardEl = document.getElementById('dashboard');
 const secondaryModuleBtn = document.getElementById('secondaryModuleBtn');
 const primaryModuleBtn = document.getElementById('primaryModuleBtn');
 const appInfoBtn = document.getElementById('appInfoBtn');
-const primaryNoticeEl = document.getElementById('primaryNotice');
 const stageInlineLabelEl = document.getElementById('stageInlineLabel');
 const globalSsttFilterEl = document.getElementById('globalSsttFilter');
 const selectedSsttDisplayEl = document.getElementById('selectedSsttDisplay');
@@ -489,7 +488,6 @@ function renderActiveStageData() {
     emptyStateEl.classList.remove('hidden');
     emptyStateEl.innerHTML = 'Selecciona un fitxer CSV per mostrar els gràfics i els resums.';
     fileStatusEl.textContent = '';
-    primaryNoticeEl?.classList.toggle('hidden', state.educationStage !== 'PRIMARIA');
     return;
   }
 
@@ -505,14 +503,12 @@ function renderActiveStageData() {
         <p class="text-2xl font-extrabold text-slate-600">👉 TRIA SSTT 👈</p>
       </div>
     `;
-    primaryNoticeEl?.classList.add('hidden');
     fileStatusEl.textContent = '';
     return;
   }
 
   renderAll(filteredRows);
   showDashboard();
-  primaryNoticeEl?.classList.add('hidden');
   applyActiveView();
 
   if (!filteredRows.length && selectedSstt !== 'ALL') {
