@@ -109,28 +109,6 @@
         border-spacing: 0;
       }
 
-      .primary-management-table th:nth-child(1),
-      .primary-management-table td:nth-child(1) { width: 9%; }
-      .primary-management-table th:nth-child(2),
-      .primary-management-table td:nth-child(2) { width: 13%; }
-      .primary-management-table th:nth-child(3),
-      .primary-management-table td:nth-child(3) { width: 5%; }
-      .primary-management-table th:nth-child(4),
-      .primary-management-table td:nth-child(4) { width: 7%; }
-      .primary-management-table th:nth-child(5),
-      .primary-management-table td:nth-child(5) { width: 7%; }
-      .primary-management-table th:nth-child(6),
-      .primary-management-table td:nth-child(6) { width: 7%; }
-      .primary-management-table th:nth-child(7),
-      .primary-management-table td:nth-child(7) { width: 7%; }
-      .primary-management-table th:nth-child(8),
-      .primary-management-table td:nth-child(8) { width: calc(40% / 3); }
-      .primary-management-table th:nth-child(9),
-      .primary-management-table td:nth-child(9) { width: calc(40% / 3); }
-      .primary-management-table th:nth-child(10),
-      .primary-management-table td:nth-child(10) { width: calc(40% / 3); }
-      .primary-management-table th:nth-child(11),
-      .primary-management-table td:nth-child(11) { width: 5%; }
       .primary-management-table td {
         overflow-wrap: anywhere;
       }
@@ -139,7 +117,33 @@
       .primary-management-table td {
         padding-left: 0;
         padding-right: 0;
+        white-space: normal;
       }
+
+      .primary-management-table th:nth-child(1),
+      .primary-management-table td:nth-child(1) { width: 8%; }
+      .primary-management-table th:nth-child(2),
+      .primary-management-table td:nth-child(2) { width: 12%; }
+      .primary-management-table th:nth-child(3),
+      .primary-management-table td:nth-child(3) { width: 5%; }
+      .primary-management-table th:nth-child(4),
+      .primary-management-table td:nth-child(4),
+      .primary-management-table th:nth-child(5),
+      .primary-management-table td:nth-child(5),
+      .primary-management-table th:nth-child(6),
+      .primary-management-table td:nth-child(6),
+      .primary-management-table th:nth-child(7),
+      .primary-management-table td:nth-child(7) { width: 7%; }
+      .primary-management-table th:nth-child(8),
+      .primary-management-table td:nth-child(8),
+      .primary-management-table th:nth-child(12),
+      .primary-management-table td:nth-child(12) { width: 5%; }
+      .primary-management-table th:nth-child(9),
+      .primary-management-table td:nth-child(9),
+      .primary-management-table th:nth-child(10),
+      .primary-management-table td:nth-child(10),
+      .primary-management-table th:nth-child(11),
+      .primary-management-table td:nth-child(11) { width: calc(37% / 3); }
 
       .management-table thead th {
         background: #dbeafe;
@@ -578,6 +582,14 @@
             Mostra, dels casos amb e-Valisa necessària=SI, quants tenen e-Valisa rebuda=SI, NO o INVÀLIDA.
           </p>
           <canvas id="neededReceivedDonutChart" height="280"></canvas>
+        </article>
+
+        <article id="primaryCallChartCard" class="hidden rounded-2xl bg-white p-4 shadow">
+          <h2 class="mb-1 text-lg font-semibold">Trucada de ST (SI/NO)</h2>
+          <p class="mb-4 text-sm text-slate-500">
+            Mostra les trucades realitzades o no dels casos amb e-Valisa necessària=SI i e-Valisa rebuda= NO o INVÀLIDA.
+          </p>
+          <canvas id="primaryCallStatusChart" height="280"></canvas>
         </article>
       </section>
 

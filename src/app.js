@@ -19,6 +19,7 @@ const state = {
     receivedVsTotal: null,
     neededReceivedDonut: null,
     neededVsReceivedBySstt: null,
+    primaryCallStatusDonut: null,
   },
 };
 
@@ -37,6 +38,7 @@ const viewChartsBtn = document.getElementById('viewChartsBtn');
 const fileTriggerEl = document.querySelector('label[for="fileInput"]');
 const summaryCardsEl = document.getElementById('summaryCards');
 const chartsGridSectionEl = document.getElementById('chartsGridSection');
+const primaryCallChartCardEl = document.getElementById('primaryCallChartCard');
 const bySsttSectionEl = document.getElementById('bySsttSection');
 const neededReceivedSectionEl = document.getElementById('neededReceivedSection');
 const yesNoSectionEl = document.getElementById('yesNoSection');
@@ -63,6 +65,7 @@ const neededReceivedTableEl = document.getElementById('neededReceivedTable');
 
 const receivedVsTotalCtx = document.getElementById('receivedVsTotalChart').getContext('2d');
 const neededReceivedDonutCtx = document.getElementById('neededReceivedDonutChart').getContext('2d');
+const primaryCallStatusCtx = document.getElementById('primaryCallStatusChart')?.getContext('2d');
 const neededVsReceivedBySsttCtx = document.getElementById('neededVsReceivedBySsttChart').getContext('2d');
 
 if (window.ChartDataLabels) {
@@ -522,6 +525,7 @@ function renderActiveStageData() {
 function setEducationStage(stage) {
   applyThemeForEducationStage(stage);
   updateModuleButtons(stage);
+  updateChartsLayoutForStage();
   state.activeView = 'MANAGEMENT';
   if (stageInlineLabelEl) {
     stageInlineLabelEl.textContent = getActiveStageConfig().stageLabel;
@@ -532,6 +536,12 @@ function setEducationStage(stage) {
 
   renderActiveStageData();
   applyActiveView();
+}
+
+function updateChartsLayoutForStage() {
+  primaryCallChartCardEl?.classList.remove('hidden');
+  chartsGridSectionEl?.classList.remove('lg:grid-cols-2');
+  chartsGridSectionEl?.classList.add('lg:grid-cols-3');
 }
 
 function renderSummary(rows) {
@@ -621,6 +631,75 @@ function renderNeededReceivedDonutChart(rows) {
           data: [receivedYes, receivedNo, receivedInvalid],
           backgroundColor: [palette.accent, palette.soft, palette.invalid],
           borderColor: [palette.accentBorder, palette.softBorder, palette.invalidBorder],
+          borderWidth: 1,
+        },
+      ],
+    },
+    options: {
+      plugins: {
+        centerTotalText: {
+          display: true,
+          color: '#0f172a',
+          fontSize: 48,
+        },
+        datalabels: {
+          color: '#0f172a',
+          font: { weight: '700', size: 30 },
+          formatter: (value) => value,
+        },
+        legend: { position: 'bottom' },
+      },
+    },
+  });
+}
+
+function computePrimaryCallStatus(rows) {
+  const stageConfig = getActiveStageConfig();
+  const neededField = normalizeHeader(stageConfig.summary.neededField);
+  const receivedField = normalizeHeader(stageConfig.summary.receivedField);
+  const receivedStatusField = normalizeHeader(stageConfig.summary.receivedStatusField || '');
+  const callDoneField = normalizeHeader('Trucada realitzada');
+  let callYes = 0;
+  let callNo = 0;
+
+  rows.forEach((row) => {
+    const needed = normalizeBoolean(row[neededField]) === true;
+    if (!needed) return;
+
+    const explicitStatus = receivedStatusField ? normalizeCategoryText(row[receivedStatusField]) : '';
+    let status = classifyReceivedStatus(row[receivedField]);
+
+    if (status === 'SI' && explicitStatus.includes('INVALIDA')) {
+      status = 'INVALIDA';
+    }
+
+    if (!['NO', 'INVALIDA'].includes(status)) return;
+
+    if (normalizeBoolean(row[callDoneField]) === true) callYes += 1;
+    else callNo += 1;
+  });
+
+  return { callYes, callNo };
+}
+
+function renderPrimaryCallStatusChart(rows) {
+  if (!primaryCallStatusCtx) return;
+  const palette = getPalette();
+  const { callYes, callNo } = computePrimaryCallStatus(rows);
+
+  if (state.charts.primaryCallStatusDonut) {
+    state.charts.primaryCallStatusDonut.destroy();
+  }
+
+  state.charts.primaryCallStatusDonut = new Chart(primaryCallStatusCtx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Trucada realitzada (SI)', 'Trucada realitzada (NO)'],
+      datasets: [
+        {
+          data: [callYes, callNo],
+          backgroundColor: [palette.accent, palette.soft],
+          borderColor: [palette.accentBorder, palette.softBorder],
           borderWidth: 1,
         },
       ],
@@ -840,6 +919,7 @@ function renderSecondaryActionView(rows) {
   const nomFields = ['Nom'];
   const requestedFields = ['e-Valisa sol·licitada', 'e-Valisa sol licitada', 'e-Valisa solicitada'];
   const receivedFields = [stageConfig.summary.receivedField];
+  const callDoneFields = ['Trucada realitzada'];
   const receivedStatusFields = [stageConfig.summary.receivedStatusField || ''];
   const assessorActionFields = ['Acció assessors', 'Accio assessors'];
   const reasonFields = ['MOTIU discrepancia', 'Motiu discrepància', 'Motiu discrepancia'];
@@ -848,6 +928,13 @@ function renderSecondaryActionView(rows) {
   const showReceivedStatusColumn = state.educationStage === 'PRIMARIA';
   const showAssessorActionColumn = state.educationStage === 'PRIMARIA';
   const showDigitalAssessorNotesColumn = state.educationStage === 'PRIMARIA';
+  const showSecondaryCallDoneColumn = state.educationStage === 'SECUNDARIA';
+  const showPrimaryCallDoneColumn = state.educationStage === 'PRIMARIA';
+  const renderCallDoneBadge = (row) => (
+    normalizeBoolean(getRowValue(row, callDoneFields)) === true
+      ? '<span class="text-green-600 font-bold text-xl leading-none">✓</span>'
+      : '<span class="text-rose-600 font-bold text-xl leading-none">✗</span>'
+  );
   state.managementRowsByKey = new Map(rows.map((row) => [getRowKey(row), row]));
 
   if (managementSectionTitleEl) {
@@ -904,8 +991,12 @@ function renderSecondaryActionView(rows) {
         <td>${escapeHtml(row[ssttField] || '')}</td>
         <td class="text-center">${escapeHtml(getRowValue(row, requestedFields))}</td>
         <td class="text-center">${escapeHtml(getRowValue(row, receivedFields))}</td>
+        ${showSecondaryCallDoneColumn
+          ? `<td class="text-center">${renderCallDoneBadge(row)}</td>`
+          : ''}
         ${showReceivedStatusColumn ? `<td class="text-center">${escapeHtml(getRowValue(row, receivedStatusFields))}</td>` : ''}
         ${showAssessorActionColumn ? `<td class="text-center">${escapeHtml(getRowValue(row, assessorActionFields))}</td>` : ''}
+        ${showPrimaryCallDoneColumn ? `<td class="text-center">${renderCallDoneBadge(row)}</td>` : ''}
         <td>${escapeHtml(getRowValue(row, reasonFields))}</td>
         <td>${escapeHtml(getRowValue(row, notesFields))}</td>
         ${showDigitalAssessorNotesColumn ? `<td>${escapeHtml(getRowValue(row, digitalAssessorNotesFields))}</td>` : ''}
@@ -926,8 +1017,10 @@ function renderSecondaryActionView(rows) {
           <th>SSTT</th>
           <th class="text-center">e-Valisa sol·licitada</th>
           <th class="text-center">e-Valisa rebuda</th>
+          ${showSecondaryCallDoneColumn ? '<th class="text-center text-2xl leading-none" title="Trucada realitzada">📞</th>' : ''}
           ${showReceivedStatusColumn ? '<th class="text-center">Estat e-Valisa</th>' : ''}
           ${showAssessorActionColumn ? '<th class="text-center">Acció assessors</th>' : ''}
+          ${showPrimaryCallDoneColumn ? '<th class="text-center text-2xl leading-none" title="Trucada realitzada">📞</th>' : ''}
           <th>Motiu discrepància</th>
           <th>Observacions</th>
           ${showDigitalAssessorNotesColumn ? '<th>Observacions Assesors Digitals</th>' : ''}
@@ -986,6 +1079,7 @@ function renderSecondaryActionView(rows) {
         <td class="text-center">${escapeHtml(getRowValue(row, receivedFields))}</td>
         <td class="text-center">${escapeHtml(getRowValue(row, receivedStatusFields))}</td>
         <td class="text-center">${escapeHtml(getRowValue(row, assessorActionFields))}</td>
+        <td class="text-center">${renderCallDoneBadge(row)}</td>
         <td>${escapeHtml(getRowValue(row, reasonFields))}</td>
         <td>${escapeHtml(getRowValue(row, notesFields))}</td>
         <td>${escapeHtml(getRowValue(row, digitalAssessorNotesFields))}</td>
@@ -1008,6 +1102,7 @@ function renderSecondaryActionView(rows) {
             <th class="text-center">e-Valisa rebuda</th>
             <th class="text-center">Estat e-Valisa</th>
             <th class="text-center">Acció assessors</th>
+            <th class="text-center text-2xl leading-none" title="Trucada realitzada">📞</th>
             <th>Motiu discrepància</th>
             <th>Observacions</th>
             <th>Observacions Assesors Digitals</th>
@@ -1143,10 +1238,12 @@ function closeAboutModal() {
 }
 
 function renderAll(rows) {
+  updateChartsLayoutForStage();
   renderSummary(rows);
   renderSecondaryActionView(rows);
   renderReceivedVsTotalChart(rows);
   renderNeededReceivedDonutChart(rows);
+  renderPrimaryCallStatusChart(rows);
   renderNeededVsReceivedBySsttChart(rows);
   renderNeededReceivedTable(rows);
   renderYesNoTable(rows);
