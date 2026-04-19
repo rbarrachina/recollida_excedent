@@ -13,7 +13,6 @@ const state = {
     PRIMARIA: '',
   },
   activeView: 'MANAGEMENT',
-  managementRows: [],
   managementRowsByKey: new Map(),
   charts: {
     receivedVsTotal: null,
@@ -47,8 +46,6 @@ const managementSectionTitleEl = document.getElementById('managementSectionTitle
 const managementSectionSubtitleEl = document.getElementById('managementSectionSubtitle');
 const secondaryActionCountEl = document.getElementById('secondaryActionCount');
 const secondaryActionTableEl = document.getElementById('secondaryActionTable');
-const primaryJointActionTableSectionEl = document.getElementById('primaryJointActionTableSection');
-const primaryJointActionTableEl = document.getElementById('primaryJointActionTable');
 const primaryAdvisorTableSectionEl = document.getElementById('primaryAdvisorTableSection');
 const primaryAdvisorTableEl = document.getElementById('primaryAdvisorTable');
 const centreInfoModalEl = document.getElementById('centreInfoModal');
@@ -1437,7 +1434,6 @@ function renderSecondaryActionView(rows) {
     <span class="management-count-number block text-center text-5xl font-extrabold leading-none">${combinedRows.length}</span>
     <span class="management-count-label mt-1 block text-center text-base">centres pendents d'actuació</span>
   `;
-  state.managementRows = combinedRows;
 
   if (!combinedRows.length) {
     secondaryActionTableEl.innerHTML = `
@@ -1497,15 +1493,10 @@ function renderSecondaryActionView(rows) {
   }
 
   if (state.educationStage !== 'PRIMARIA') {
-    primaryJointActionTableSectionEl?.classList.add('hidden');
-    if (primaryJointActionTableEl) primaryJointActionTableEl.innerHTML = '';
     primaryAdvisorTableSectionEl?.classList.add('hidden');
     if (primaryAdvisorTableEl) primaryAdvisorTableEl.innerHTML = '';
     return;
   }
-
-  primaryJointActionTableSectionEl?.classList.add('hidden');
-  if (primaryJointActionTableEl) primaryJointActionTableEl.innerHTML = '';
 
   primaryAdvisorTableSectionEl?.classList.remove('hidden');
   const firstTableKeys = new Set(combinedRows.map((row) => getRowKey(row)));
@@ -1802,23 +1793,6 @@ secondaryActionTableEl?.addEventListener('click', (event) => {
 });
 
 primaryAdvisorTableEl?.addEventListener('click', (event) => {
-  const centreSheetTarget = event.target.closest('[data-centre-sheet-key]');
-  if (centreSheetTarget) {
-    const rowKey = centreSheetTarget.dataset.centreSheetKey;
-    const row = state.managementRowsByKey.get(rowKey);
-    if (!row) return;
-    openCentreSheetModal(row);
-    return;
-  }
-  const target = event.target.closest('[data-info-key]');
-  if (!target) return;
-  const rowKey = target.dataset.infoKey;
-  const row = state.managementRowsByKey.get(rowKey);
-  if (!row) return;
-  openCentreInfoModal(row);
-});
-
-primaryJointActionTableEl?.addEventListener('click', (event) => {
   const centreSheetTarget = event.target.closest('[data-centre-sheet-key]');
   if (centreSheetTarget) {
     const rowKey = centreSheetTarget.dataset.centreSheetKey;
