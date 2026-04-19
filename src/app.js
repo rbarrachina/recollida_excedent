@@ -1,5 +1,5 @@
 const state = {
-  educationStage: 'SECUNDARIA',
+  educationStage: 'PRIMARIA',
   rowsByStage: {
     SECUNDARIA: [],
     PRIMARIA: [],
@@ -1881,4 +1881,4 @@ primaryModuleBtn?.addEventListener('click', () => {
   setEducationStage('PRIMARIA');
 });
 
-setEducationStage('SECUNDARIA');
+setEducationStage('PRIMARIA');
