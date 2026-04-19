@@ -14,11 +14,7 @@ Aplicacio web estatica amb Tailwind + Chart.js per resumir el CSV de discrepanci
 1. Des de la carpeta del projecte, aixeca un servidor local:
    - `python3 -m http.server 8000`
 2. Obre `http://localhost:8000`
-3. Pots carregar:
-   - la mostra inclosa (`Carrega mostra`), o
-   - el teu propi CSV amb l'input de fitxer.
-
-Fitxer de mostra inclos a `data/discrepancies.csv`.
+3. Carrega el teu propi CSV amb l'input de fitxer.
 
 ## Autor
 
