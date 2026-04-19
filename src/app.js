@@ -473,15 +473,16 @@ function buildFitxaCellValue(label, value) {
   const escaped = escapeHtml(safeValue);
 
   if (isEmailField) {
-    return `<div class="fitxa-inline-actions"><span>${escaped}</span><button class="fitxa-copy-btn" data-copy="${escaped}" type="button">Copiar</button></div>`;
+    const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(safeValue)}`;
+    return `<div class="fitxa-inline-actions"><span>${escaped}</span><button class="fitxa-gmail-btn fitxa-btn-secondary" data-gmail-url="${escapeHtml(gmailUrl)}" type="button">Gmail</button><button class="fitxa-copy-btn fitxa-btn-primary" data-copy="${escaped}" type="button">Copiar</button></div>`;
   }
   if (phoneNumber) {
     const safePhone = escapeHtml(phoneNumber);
-    return `<div class="fitxa-inline-actions"><span>${escaped}</span><button class="fitxa-call-btn" data-call-number="${safePhone}" type="button">Trucar</button><button class="fitxa-phone-copy-btn" data-copy-phone="${safePhone}" type="button">Copiar</button></div>`;
+    return `<div class="fitxa-inline-actions"><span>${escaped}</span><button class="fitxa-call-btn fitxa-btn-secondary" data-call-number="${safePhone}" type="button">Trucar</button><button class="fitxa-phone-copy-btn fitxa-btn-primary" data-copy-phone="${safePhone}" type="button">Copiar</button></div>`;
   }
   if (webUrl) {
     const normalizedUrl = /^https?:\/\//i.test(webUrl) ? webUrl : `http://${webUrl}`;
-    return `<div class="fitxa-inline-actions"><span>${escaped}</span><button class="fitxa-web-btn" data-open-url="${escapeHtml(normalizedUrl)}" type="button">Web</button></div>`;
+    return `<div class="fitxa-inline-actions"><span>${escaped}</span><button class="fitxa-web-btn fitxa-btn-secondary" data-open-url="${escapeHtml(normalizedUrl)}" type="button">Web</button></div>`;
   }
 
   return escaped;
@@ -525,6 +526,15 @@ function buildFitxaTableRows(data) {
     'Localitat',
     'Nom municipi',
   ]);
+  const natureValue = pullFieldByLabel([
+    'Naturalesa',
+  ]);
+  const anyValue = pullFieldByLabel([
+    'Any',
+  ]);
+  const cursValue = pullFieldByLabel([
+    'Curs',
+  ]);
 
   rows.push(`<tr><th>Codi centre</th><td>${escapeHtml((data.centre && data.centre.code) || data.requestedCode || '')}</td></tr>`);
   rows.push(`<tr><th>Nom centre</th><td>${escapeHtml((data.centre && data.centre.name) || '')}</td></tr>`);
@@ -537,15 +547,29 @@ function buildFitxaTableRows(data) {
   if (data.coordinates && data.coordinates.x && data.coordinates.y) {
     const coordText = fields.Coordenades || `${data.coordinates.x} X | ${data.coordinates.y} Y`;
     rows.push(
-      `<tr><th>Coordenades</th><td><div class="fitxa-inline-actions"><span>${escapeHtml(coordText)}</span><button class="fitxa-map-btn" type="button" data-map-x="${escapeHtml(data.coordinates.x)}" data-map-y="${escapeHtml(data.coordinates.y)}">Veure mapa</button></div></td></tr>`,
+      `<tr><th>Coordenades</th><td><div class="fitxa-inline-actions"><span>${escapeHtml(coordText)}</span><button class="fitxa-map-btn fitxa-btn-secondary" type="button" data-map-x="${escapeHtml(data.coordinates.x)}" data-map-y="${escapeHtml(data.coordinates.y)}">Veure mapa</button></div></td></tr>`,
     );
   }
+  if (natureValue) {
+    rows.push(`<tr><th>Naturalesa</th><td>${buildFitxaCellValue('Naturalesa', natureValue)}</td></tr>`);
+  }
 
+  let insertedAnyAndCurs = false;
   Object.entries(fields).forEach(([label, value]) => {
     if (label === 'Coordenades') return;
     const displayValue = Array.isArray(value) ? value.join(' | ') : String(value ?? '');
     rows.push(`<tr><th>${escapeHtml(label)}</th><td>${buildFitxaCellValue(label, displayValue)}</td></tr>`);
+    if (label === 'Coordenada Geo Y') {
+      if (anyValue) rows.push(`<tr><th>Any</th><td>${buildFitxaCellValue('Any', anyValue)}</td></tr>`);
+      if (cursValue) rows.push(`<tr><th>Curs</th><td>${buildFitxaCellValue('Curs', cursValue)}</td></tr>`);
+      insertedAnyAndCurs = true;
+    }
   });
+
+  if (!insertedAnyAndCurs) {
+    if (anyValue) rows.push(`<tr><th>Any</th><td>${buildFitxaCellValue('Any', anyValue)}</td></tr>`);
+    if (cursValue) rows.push(`<tr><th>Curs</th><td>${buildFitxaCellValue('Curs', cursValue)}</td></tr>`);
+  }
 
   return rows.join('');
 }
@@ -1016,7 +1040,24 @@ function renderReceivedVsTotalChart(rows) {
 
 function renderNeededReceivedDonutChart(rows) {
   const { receivedYes, receivedNo, receivedInvalid } = computeNeededReceivedStatus(rows);
-  const palette = getPalette();
+  const isPrimary = state.educationStage === 'PRIMARIA';
+  const donutColors = isPrimary
+    ? {
+        no: '#d97706',
+        noBorder: '#b45309',
+        invalid: '#fdba74',
+        invalidBorder: '#fb923c',
+        yes: '#fef3c7',
+        yesBorder: '#fde68a',
+      }
+    : {
+        no: '#0284c7',
+        noBorder: '#0369a1',
+        invalid: '#7dd3fc',
+        invalidBorder: '#38bdf8',
+        yes: '#cbd5e1',
+        yesBorder: '#94a3b8',
+      };
 
   if (state.charts.neededReceivedDonut) {
     state.charts.neededReceivedDonut.destroy();
@@ -1025,12 +1066,12 @@ function renderNeededReceivedDonutChart(rows) {
   state.charts.neededReceivedDonut = new Chart(neededReceivedDonutCtx, {
     type: 'doughnut',
     data: {
-      labels: ['e-Valisa rebuda (SI)', 'e-Valisa rebuda (NO)', 'e-Valisa rebuda (INVÀLIDA)'],
+      labels: ['e-Valisa rebuda (NO)', 'e-Valisa rebuda (INVÀLIDA)', 'e-Valisa rebuda (SI)'],
       datasets: [
         {
-          data: [receivedYes, receivedNo, receivedInvalid],
-          backgroundColor: [palette.accent, palette.soft, palette.invalid],
-          borderColor: [palette.accentBorder, palette.softBorder, palette.invalidBorder],
+          data: [receivedNo, receivedInvalid, receivedYes],
+          backgroundColor: [donutColors.no, donutColors.invalid, donutColors.yes],
+          borderColor: [donutColors.noBorder, donutColors.invalidBorder, donutColors.yesBorder],
           borderWidth: 1,
         },
       ],
@@ -1094,10 +1135,10 @@ function renderPrimaryCallStatusChart(rows) {
   state.charts.primaryCallStatusDonut = new Chart(primaryCallStatusCtx, {
     type: 'doughnut',
     data: {
-      labels: ['Trucada realitzada (SI)', 'Trucada realitzada (NO)'],
+      labels: ['Trucada realitzada (NO)', 'Trucada realitzada (SI)'],
       datasets: [
         {
-          data: [callYes, callNo],
+          data: [callNo, callYes],
           backgroundColor: [palette.accent, palette.soft],
           borderColor: [palette.accentBorder, palette.softBorder],
           borderWidth: 1,
@@ -1432,7 +1473,7 @@ function renderSecondaryActionView(rows) {
     `).join('');
 
     secondaryActionTableEl.innerHTML = `
-    <table class="management-table text-left text-sm${state.educationStage === 'PRIMARIA' ? ' primary-management-table' : ''}">
+    <table class="management-table text-left text-sm${state.educationStage === 'PRIMARIA' ? ' primary-management-table' : ' secondary-management-table'}">
       <thead>
         <tr>
           <th>Codi</th>
@@ -1823,6 +1864,11 @@ centreSheetContentEl?.addEventListener('click', async (event) => {
 
   if (target.dataset.openUrl) {
     window.open(target.dataset.openUrl, '_blank', 'noopener,noreferrer');
+    return;
+  }
+
+  if (target.dataset.gmailUrl) {
+    window.open(target.dataset.gmailUrl, '_blank', 'noopener,noreferrer');
     return;
   }
 

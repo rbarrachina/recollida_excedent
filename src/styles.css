@@ -96,6 +96,40 @@
   border-collapse: collapse;
 }
 
+.secondary-management-table {
+  table-layout: fixed;
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+
+.secondary-management-table td {
+  overflow-wrap: anywhere;
+}
+
+.secondary-management-table th,
+.secondary-management-table td {
+  white-space: normal;
+}
+
+.secondary-management-table th:nth-child(1),
+.secondary-management-table td:nth-child(1) { width: 8%; }
+.secondary-management-table th:nth-child(2),
+.secondary-management-table td:nth-child(2) { width: 16%; }
+.secondary-management-table th:nth-child(3),
+.secondary-management-table td:nth-child(3) { width: 6%; }
+.secondary-management-table th:nth-child(4),
+.secondary-management-table td:nth-child(4),
+.secondary-management-table th:nth-child(5),
+.secondary-management-table td:nth-child(5) { width: 8%; }
+.secondary-management-table th:nth-child(6),
+.secondary-management-table td:nth-child(6),
+.secondary-management-table th:nth-child(9),
+.secondary-management-table td:nth-child(9) { width: 7%; }
+.secondary-management-table th:nth-child(7),
+.secondary-management-table td:nth-child(7),
+.secondary-management-table th:nth-child(8),
+.secondary-management-table td:nth-child(8) { width: 20%; }
+
 .primary-management-table {
   table-layout: fixed;
   border-collapse: collapse;
@@ -128,7 +162,7 @@
 .primary-management-table th:nth-child(7),
 .primary-management-table td:nth-child(7) { width: 7%; }
 .primary-management-table th:nth-child(8),
-.primary-management-table td:nth-child(8),
+.primary-management-table td:nth-child(8) { width: 5%; }
 .primary-management-table th:nth-child(12),
 .primary-management-table td:nth-child(12) { width: 8%; }
 .primary-management-table th:nth-child(9),
@@ -136,7 +170,7 @@
 .primary-management-table th:nth-child(10),
 .primary-management-table td:nth-child(10),
 .primary-management-table th:nth-child(11),
-.primary-management-table td:nth-child(11) { width: calc(34% / 3); }
+.primary-management-table td:nth-child(11) { width: calc(37% / 3); }
 
 .management-table thead th {
   background: #dbeafe;
@@ -478,19 +512,13 @@
   font-weight: 700;
 }
 
-.fitxa-copy-btn,
-.fitxa-phone-copy-btn,
-.fitxa-map-btn,
-.fitxa-web-btn {
-  background: #0f766e;
-}
-
-.fitxa-call-btn {
-  background: #15803d;
-}
-
-.fitxa-map-btn {
+.fitxa-btn-primary {
   background: #2563eb;
+}
+
+.fitxa-btn-secondary {
+  background: #93c5fd;
+  color: #0f172a;
 }
 
 .map-frame {
@@ -562,18 +590,13 @@
   background: #fff7ed;
 }
 
-.theme-primary .fitxa-copy-btn,
-.theme-primary .fitxa-phone-copy-btn,
-.theme-primary .fitxa-web-btn {
-  background: #c2410c;
-}
-
-.theme-primary .fitxa-call-btn {
-  background: #b45309;
-}
-
-.theme-primary .fitxa-map-btn {
+.theme-primary .fitxa-btn-primary {
   background: #ea580c;
+}
+
+.theme-primary .fitxa-btn-secondary {
+  background: #fdba74;
+  color: #0f172a;
 }
 
 .theme-primary .about-modal-card {
