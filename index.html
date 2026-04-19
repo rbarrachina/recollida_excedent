@@ -10,7 +10,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
   </head>
   <body class="min-h-screen bg-slate-100 text-slate-900">
-    <main class="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8">
+    <main class="mx-auto max-w-[96rem] p-4 sm:p-6 lg:p-8">
       <header id="mainHeader" class="mb-6 rounded-2xl bg-gradient-to-r from-emerald-700 to-lime-600 p-6 text-white shadow-lg">
         <div class="flex flex-wrap items-center justify-center gap-4 text-center sm:justify-between sm:text-left">
           <div>
@@ -132,6 +132,38 @@
         </div>
       </div>
 
+      <div id="centreSheetModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-sky-900/35 p-4">
+        <div class="modal-shell w-full max-w-4xl rounded-2xl shadow-2xl">
+          <div class="modal-header flex items-center justify-between px-5 py-4">
+            <h3 id="centreSheetTitle" class="modal-title text-lg font-semibold">Fitxa del centre</h3>
+            <button id="closeCentreSheetBtn" type="button" class="modal-close rounded-md px-2 py-1">Tanca</button>
+          </div>
+          <div id="centreSheetContent" class="max-h-[75vh] overflow-y-auto p-5"></div>
+        </div>
+      </div>
+
+      <div id="centreMapModal" class="fixed inset-0 z-[60] hidden items-center justify-center bg-slate-900/45 p-4">
+        <div class="map-modal-card w-full max-w-4xl rounded-2xl bg-white shadow-2xl">
+          <div class="modal-header flex items-center justify-between px-5 py-4">
+            <h3 class="modal-title text-lg font-semibold">Ubicació del centre</h3>
+            <button id="closeCentreMapBtn" type="button" class="modal-close rounded-md px-2 py-1">Tanca</button>
+          </div>
+          <div class="p-5">
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+              <p id="centreMapCoordsLabel" class="text-sm text-slate-600"></p>
+              <a
+                id="openCentreMapLink"
+                href="#"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >Obre mapa</a>
+            </div>
+            <iframe id="centreMapFrame" class="map-frame" title="Mapa del centre"></iframe>
+          </div>
+        </div>
+      </div>
+
       <div id="aboutModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/40 p-4">
         <div class="about-modal-card w-full max-w-md p-6">
           <div class="mb-5 flex items-center justify-between">
@@ -170,6 +202,6 @@
       </div>
     </main>
 
-    <script type="module" src="./src/app.js?v=33"></script>
+    <script type="module" src="./src/app.js?v=34"></script>
   </body>
 </html>

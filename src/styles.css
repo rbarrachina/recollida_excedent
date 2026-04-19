@@ -130,13 +130,13 @@
 .primary-management-table th:nth-child(8),
 .primary-management-table td:nth-child(8),
 .primary-management-table th:nth-child(12),
-.primary-management-table td:nth-child(12) { width: 5%; }
+.primary-management-table td:nth-child(12) { width: 8%; }
 .primary-management-table th:nth-child(9),
 .primary-management-table td:nth-child(9),
 .primary-management-table th:nth-child(10),
 .primary-management-table td:nth-child(10),
 .primary-management-table th:nth-child(11),
-.primary-management-table td:nth-child(11) { width: calc(37% / 3); }
+.primary-management-table td:nth-child(11) { width: calc(34% / 3); }
 
 .management-table thead th {
   background: #dbeafe;
@@ -172,6 +172,43 @@
 
 .info-btn:hover {
   background: #1e40af;
+}
+
+.info-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 9999px;
+  border: 0;
+  color: #ffffff;
+  cursor: pointer;
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+
+.icon-btn svg {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+.icon-btn:hover {
+  filter: brightness(0.96);
+  transform: translateY(-1px);
+}
+
+.centre-sheet-btn {
+  background: #0f766e;
+}
+
+.centre-sheet-btn:hover {
+  background: #115e59;
 }
 
 .theme-primary .action-btn {
@@ -215,6 +252,14 @@
 
 .theme-primary .info-btn:hover {
   background: #9a3412;
+}
+
+.theme-primary .centre-sheet-btn {
+  background: #9a3412;
+}
+
+.theme-primary .centre-sheet-btn:hover {
+  background: #7c2d12;
 }
 
 .top-info-btn {
@@ -327,6 +372,10 @@
   border: 2px solid #3b82f6;
 }
 
+.map-modal-card {
+  border: 2px solid #3b82f6;
+}
+
 .modal-header {
   background: #eff6ff;
   border-bottom: 2px solid #60a5fa;
@@ -366,7 +415,97 @@
   color: #0f172a;
 }
 
+.fitxa-sheet-status {
+  margin-bottom: 0.9rem;
+  font-size: 0.95rem;
+  color: #475569;
+}
+
+.fitxa-sheet-status.error {
+  color: #b91c1c;
+}
+
+.fitxa-sheet-meta {
+  margin-bottom: 0.9rem;
+  font-size: 0.9rem;
+  color: #64748b;
+}
+
+.fitxa-sheet-table-wrap {
+  overflow-x: auto;
+}
+
+.fitxa-sheet-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #ffffff;
+  border: 1px solid #bfdbfe;
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
+
+.fitxa-sheet-table th,
+.fitxa-sheet-table td {
+  padding: 0.7rem 0.8rem;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid #dbeafe;
+}
+
+.fitxa-sheet-table th {
+  width: 38%;
+  font-weight: 700;
+  color: #1e3a8a;
+  background: #eff6ff;
+}
+
+.fitxa-sheet-table tr:last-child th,
+.fitxa-sheet-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.fitxa-inline-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.fitxa-inline-actions button {
+  padding: 0.3rem 0.65rem;
+  border-radius: 0.45rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.fitxa-copy-btn,
+.fitxa-phone-copy-btn,
+.fitxa-map-btn,
+.fitxa-web-btn {
+  background: #0f766e;
+}
+
+.fitxa-call-btn {
+  background: #15803d;
+}
+
+.fitxa-map-btn {
+  background: #2563eb;
+}
+
+.map-frame {
+  width: 100%;
+  height: 440px;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.75rem;
+  background: #fff;
+}
+
 .theme-primary .modal-shell {
+  border-color: #fb923c;
+}
+
+.theme-primary .map-modal-card {
   border-color: #fb923c;
 }
 
@@ -407,6 +546,34 @@
 
 .theme-primary .modal-value {
   color: #431407;
+}
+
+.theme-primary .fitxa-sheet-table {
+  border-color: #fdba74;
+}
+
+.theme-primary .fitxa-sheet-table th,
+.theme-primary .fitxa-sheet-table td {
+  border-bottom-color: #fed7aa;
+}
+
+.theme-primary .fitxa-sheet-table th {
+  color: #9a3412;
+  background: #fff7ed;
+}
+
+.theme-primary .fitxa-copy-btn,
+.theme-primary .fitxa-phone-copy-btn,
+.theme-primary .fitxa-web-btn {
+  background: #c2410c;
+}
+
+.theme-primary .fitxa-call-btn {
+  background: #b45309;
+}
+
+.theme-primary .fitxa-map-btn {
+  background: #ea580c;
 }
 
 .theme-primary .about-modal-card {
