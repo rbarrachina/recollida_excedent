@@ -1,6 +1,6 @@
 # recollida_excedent
 
-Aplicacio web estatica amb Tailwind + Chart.js per resumir CSV de discrepancies.
+Aplicacio web estatica amb Tailwind + Chart.js per resumir CSV de discrepàncies.
 
 ## Que mostra
 
