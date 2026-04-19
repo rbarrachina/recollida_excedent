@@ -55,6 +55,15 @@ const centreInfoModalEl = document.getElementById('centreInfoModal');
 const centreInfoTitleEl = document.getElementById('centreInfoTitle');
 const centreInfoContentEl = document.getElementById('centreInfoContent');
 const closeCentreInfoBtn = document.getElementById('closeCentreInfoBtn');
+const centreSheetModalEl = document.getElementById('centreSheetModal');
+const centreSheetTitleEl = document.getElementById('centreSheetTitle');
+const centreSheetContentEl = document.getElementById('centreSheetContent');
+const closeCentreSheetBtn = document.getElementById('closeCentreSheetBtn');
+const centreMapModalEl = document.getElementById('centreMapModal');
+const closeCentreMapBtn = document.getElementById('closeCentreMapBtn');
+const centreMapFrameEl = document.getElementById('centreMapFrame');
+const openCentreMapLinkEl = document.getElementById('openCentreMapLink');
+const centreMapCoordsLabelEl = document.getElementById('centreMapCoordsLabel');
 const aboutModalEl = document.getElementById('aboutModal');
 const closeAboutModalBtn = document.getElementById('closeAboutModalBtn');
 const stageMismatchModalEl = document.getElementById('stageMismatchModal');
@@ -62,6 +71,51 @@ const closeStageMismatchBtn = document.getElementById('closeStageMismatchBtn');
 const stageMismatchTextEl = document.getElementById('stageMismatchText');
 const yesNoTableEl = document.getElementById('yesNoTable');
 const neededReceivedTableEl = document.getElementById('neededReceivedTable');
+const SOCRATA_RESOURCE_URL = 'https://analisi.transparenciacatalunya.cat/resource/kvmv-ahh4.json';
+const SOCRATA_SOURCE_URL = 'https://analisi.transparenciacatalunya.cat/d/kvmv-ahh4';
+const FITXA_KEY_LABELS = {
+  any: 'Any',
+  curs: 'Curs',
+  codi_centre: 'Codi centre',
+  denominaci_completa: 'Nom centre',
+  codi_naturalesa: 'Codi naturalesa',
+  nom_naturalesa: 'Naturalesa',
+  codi_titularitat: 'Codi titularitat',
+  nom_titularitat: 'Titularitat',
+  adre_a: 'Adreça',
+  codi_postal: 'Codi postal',
+  tel_fon: 'Telèfon del centre',
+  codi_delegaci: 'Codi delegació',
+  nom_delegaci: 'Àrea Territorial',
+  codi_comarca: 'Codi comarca',
+  nom_comarca: 'Comarca',
+  codi_municipi: 'Codi municipi',
+  codi_municipi_6: 'Codi municipi (6)',
+  nom_municipi: 'Població',
+  codi_districte_municipal: 'Codi districte municipal',
+  nom_dm: 'Nom districte municipal',
+  codi_localitat: 'Codi localitat',
+  nom_localitat: 'Localitat',
+  coordenades_utm_x: 'Coordenada UTM X',
+  coordenades_utm_y: 'Coordenada UTM Y',
+  coordenades_geo_x: 'Coordenada Geo X',
+  coordenades_geo_y: 'Coordenada Geo Y',
+  e_mail_centre: 'Correu electrònic del centre',
+  url: 'URL pàgina web centre',
+  imatge: 'Imatge',
+  geo_1: 'Geo 1',
+};
+const FITXA_PRIORITY_KEYS = [
+  'any', 'curs', 'codi_naturalesa', 'nom_naturalesa', 'codi_titularitat', 'nom_titularitat', 'adre_a',
+  'codi_postal', 'tel_fon', 'codi_delegaci', 'nom_delegaci', 'codi_comarca', 'nom_comarca', 'codi_municipi',
+  'codi_municipi_6', 'nom_municipi', 'codi_districte_municipal', 'nom_dm', 'codi_localitat', 'nom_localitat',
+  'coordenades_utm_x', 'coordenades_utm_y', 'coordenades_geo_x', 'coordenades_geo_y', 'e_mail_centre', 'url',
+  'imatge', 'einf1c', 'einf2c', 'epri', 'eso', 'batx', 'aa01', 'cfpm', 'ppas', 'aa03', 'cfps', 'ee', 'ife',
+  'pfi', 'pa01', 'cfam', 'pa02', 'cfas', 'esdi', 'escm', 'escs', 'adr', 'crbc', 'idi', 'dane', 'danp', 'dans',
+  'muse', 'musp', 'muss', 'tegm', 'tegs', 'estr', 'adults', 'geo_1',
+];
+let fitxaCurrentCoursePromise = null;
+const fitxaCacheByCode = new Map();
 
 const receivedVsTotalCtx = document.getElementById('receivedVsTotalChart').getContext('2d');
 const neededReceivedDonutCtx = document.getElementById('neededReceivedDonutChart').getContext('2d');
@@ -184,6 +238,347 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
+function normalizeFitxaWebUrl(value) {
+  const raw = String(value || '').trim();
+  if (!raw || raw === '0' || raw === '-') return '';
+  return raw;
+}
+
+function normalizeFitxaPhoneNumber(value) {
+  const raw = String(value || '').trim();
+  if (!raw || raw === '-' || raw === '0') return '';
+  const compact = raw.replace(/\s+/g, '');
+  const sanitized = compact.replace(/[^\d+]/g, '');
+  if (!sanitized) return '';
+  const plusCount = (sanitized.match(/\+/g) || []).length;
+  if (plusCount > 1) return '';
+  if (plusCount === 1 && !sanitized.startsWith('+')) return '';
+  const digitsOnly = sanitized.replaceAll('+', '');
+  if (digitsOnly.length < 6) return '';
+  return sanitized;
+}
+
+function normalizeCentreCode(value) {
+  const raw = String(value || '').trim();
+  if (/^8\d{6}$/.test(raw)) return `0${raw}`;
+  return raw;
+}
+
+function fitxaEscapeSoql(value) {
+  return String(value || '').replaceAll("'", "''");
+}
+
+function fitxaToInt(value) {
+  const parsed = Number(getTextValue(value));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function getTextValue(value) {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function prettifyFitxaKey(key) {
+  if (FITXA_KEY_LABELS[key]) return FITXA_KEY_LABELS[key];
+  return key
+    .replaceAll('_', ' ')
+    .replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
+function pickBestFitxaRow(rows) {
+  if (!rows.length) return null;
+  return [...rows].sort((a, b) => {
+    const yearDiff = fitxaToInt(b.any) - fitxaToInt(a.any);
+    if (yearDiff !== 0) return yearDiff;
+    const courseDiff = fitxaToInt(b.curs) - fitxaToInt(a.curs);
+    if (courseDiff !== 0) return courseDiff;
+    const aScore = Object.values(a).filter((value) => getTextValue(value)).length;
+    const bScore = Object.values(b).filter((value) => getTextValue(value)).length;
+    return bScore - aScore;
+  })[0];
+}
+
+function rowToOrderedFitxaFields(row) {
+  const fields = {};
+  const ignored = new Set(['codi_centre', 'denominaci_completa']);
+  const keys = Object.keys(row).filter((key) => !ignored.has(key));
+  const priorityPresent = FITXA_PRIORITY_KEYS.filter((key) => keys.includes(key));
+  const rest = keys.filter((key) => !priorityPresent.includes(key)).sort((a, b) => a.localeCompare(b, 'ca'));
+  [...priorityPresent, ...rest].forEach((key) => {
+    fields[prettifyFitxaKey(key)] = getTextValue(row[key]) || '-';
+  });
+  return fields;
+}
+
+async function getCurrentFitxaCourse() {
+  if (fitxaCurrentCoursePromise) return fitxaCurrentCoursePromise;
+  fitxaCurrentCoursePromise = (async () => {
+    const query = 'SELECT max(curs) as current_curs WHERE curs is not null';
+    const response = await fetch(`${SOCRATA_RESOURCE_URL}?$query=${encodeURIComponent(query)}`);
+    const rows = await response.json();
+    if (!response.ok || !Array.isArray(rows) || !rows.length || !getTextValue(rows[0]?.current_curs)) {
+      throw new Error("No s'ha pogut determinar el curs actual.");
+    }
+    return getTextValue(rows[0].current_curs);
+  })();
+  return fitxaCurrentCoursePromise;
+}
+
+async function fetchFitxaSocrataRows(whereClause, limit = 5) {
+  const currentCourse = await getCurrentFitxaCourse();
+  const query = `SELECT * WHERE curs = '${fitxaEscapeSoql(currentCourse)}' AND (${whereClause}) ORDER BY any DESC, curs DESC LIMIT ${limit}`;
+  const response = await fetch(`${SOCRATA_RESOURCE_URL}?$query=${encodeURIComponent(query)}`);
+  const raw = await response.text();
+  let rows = null;
+  try {
+    rows = JSON.parse(raw);
+  } catch {
+    if (raw.trim().startsWith('<!DOCTYPE') || raw.trim().startsWith('<html')) {
+      throw new Error("L'API ha retornat HTML en lloc de JSON.");
+    }
+    throw new Error("Resposta no vàlida de l'API.");
+  }
+  if (!response.ok) {
+    const message = Array.isArray(rows) ? "Error consultant l'API de dades obertes." : (rows?.message || "Error consultant l'API de dades obertes.");
+    throw new Error(message);
+  }
+  return Array.isArray(rows) ? rows : [];
+}
+
+function rowToFitxaData(code, row) {
+  if (!row) {
+    return {
+      status: 'not_found',
+      requestedCode: code,
+      sourceUrl: SOCRATA_SOURCE_URL,
+      message: "No s'ha trobat cap centre amb aquest codi.",
+      fields: {},
+    };
+  }
+
+  const webValue = normalizeFitxaWebUrl(row.url);
+  const x = getTextValue(row.coordenades_utm_x);
+  const y = getTextValue(row.coordenades_utm_y);
+  const fields = rowToOrderedFitxaFields(row);
+  if (webValue) fields['URL pàgina web centre'] = webValue;
+  if (x && y) fields.Coordenades = `${x} X | ${y} Y`;
+
+  return {
+    status: 'ok',
+    requestedCode: code,
+    sourceUrl: SOCRATA_SOURCE_URL,
+    centre: {
+      code: getTextValue(row.codi_centre || code).trim(),
+      name: getTextValue(row.denominaci_completa).trim() || '-',
+    },
+    coordinates: { x, y },
+    fields,
+  };
+}
+
+async function fetchFitxaByCode(code) {
+  const normalizedCode = normalizeCentreCode(code);
+  if (!/^\d{8}$/.test(normalizedCode)) {
+    return {
+      status: 'not_found',
+      requestedCode: normalizedCode,
+      sourceUrl: SOCRATA_SOURCE_URL,
+      message: 'El codi del centre no és vàlid.',
+      fields: {},
+    };
+  }
+  if (fitxaCacheByCode.has(normalizedCode)) return fitxaCacheByCode.get(normalizedCode);
+  const rows = await fetchFitxaSocrataRows(`codi_centre = '${fitxaEscapeSoql(normalizedCode)}'`, 5);
+  const data = rowToFitxaData(normalizedCode, pickBestFitxaRow(rows));
+  fitxaCacheByCode.set(normalizedCode, data);
+  return data;
+}
+
+function utmToLatLon(zone, easting, northing, isNorthernHemisphere) {
+  const a = 6378137.0;
+  const f = 1 / 298.257223563;
+  const k0 = 0.9996;
+  const eccSquared = f * (2 - f);
+  const eccPrimeSquared = eccSquared / (1 - eccSquared);
+  const e1 = (1 - Math.sqrt(1 - eccSquared)) / (1 + Math.sqrt(1 - eccSquared));
+  const x = easting - 500000.0;
+  let y = northing;
+  if (!isNorthernHemisphere) y -= 10000000.0;
+  const longOrigin = (zone - 1) * 6 - 180 + 3;
+  const m = y / k0;
+  const mu = m / (a * (1 - eccSquared / 4 - (3 * eccSquared * eccSquared) / 64 - (5 * eccSquared * eccSquared * eccSquared) / 256));
+  const phi1Rad = mu
+    + ((3 * e1) / 2 - (27 * e1 ** 3) / 32) * Math.sin(2 * mu)
+    + ((21 * e1 * e1) / 16 - (55 * e1 ** 4) / 32) * Math.sin(4 * mu)
+    + ((151 * e1 ** 3) / 96) * Math.sin(6 * mu)
+    + ((1097 * e1 ** 4) / 512) * Math.sin(8 * mu);
+  const n1 = a / Math.sqrt(1 - eccSquared * Math.sin(phi1Rad) ** 2);
+  const t1 = Math.tan(phi1Rad) ** 2;
+  const c1 = eccPrimeSquared * Math.cos(phi1Rad) ** 2;
+  const r1 = (a * (1 - eccSquared)) / Math.pow(1 - eccSquared * Math.sin(phi1Rad) ** 2, 1.5);
+  const d = x / (n1 * k0);
+  const latRad = phi1Rad - ((n1 * Math.tan(phi1Rad)) / r1) * (
+    (d * d) / 2
+    - ((5 + 3 * t1 + 10 * c1 - 4 * c1 * c1 - 9 * eccPrimeSquared) * d ** 4) / 24
+    + ((61 + 90 * t1 + 298 * c1 + 45 * t1 * t1 - 252 * eccPrimeSquared - 3 * c1 * c1) * d ** 6) / 720
+  );
+  const lonRad = (
+    d
+    - ((1 + 2 * t1 + c1) * d ** 3) / 6
+    + ((5 - 2 * c1 + 28 * t1 - 3 * c1 * c1 + 8 * eccPrimeSquared + 24 * t1 * t1) * d ** 5) / 120
+  ) / Math.cos(phi1Rad);
+
+  return {
+    lat: (latRad * 180) / Math.PI,
+    lon: longOrigin + (lonRad * 180) / Math.PI,
+  };
+}
+
+function closeCentreMapModal() {
+  if (!centreMapModalEl || !centreMapFrameEl) return;
+  centreMapModalEl.classList.add('hidden');
+  centreMapModalEl.classList.remove('flex');
+  centreMapFrameEl.src = '';
+}
+
+function openCentreMapModal(xValue, yValue) {
+  if (!centreMapModalEl || !centreMapFrameEl || !openCentreMapLinkEl || !centreMapCoordsLabelEl) return;
+  const x = Number(xValue);
+  const y = Number(yValue);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+  const converted = utmToLatLon(31, x, y, true);
+  const { lat, lon } = converted;
+  const bbox = `${lon - 0.01}%2C${lat - 0.01}%2C${lon + 0.01}%2C${lat + 0.01}`;
+  const marker = `${lat}%2C${lon}`;
+  centreMapFrameEl.src = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${marker}`;
+  openCentreMapLinkEl.href = `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=16/${lat}/${lon}`;
+  centreMapCoordsLabelEl.textContent = `X: ${xValue} | Y: ${yValue} | Lat: ${lat.toFixed(6)} | Lon: ${lon.toFixed(6)}`;
+  centreMapModalEl.classList.remove('hidden');
+  centreMapModalEl.classList.add('flex');
+}
+
+function buildFitxaCellValue(label, value) {
+  const safeValue = value || '';
+  const isEmailField = /correu/i.test(label) && /@/.test(safeValue);
+  const isPhoneField = /telef|tel[eè]fon/i.test(label);
+  const isWebField = /url|web/i.test(label);
+  const phoneNumber = isPhoneField ? normalizeFitxaPhoneNumber(safeValue) : '';
+  const webUrl = isWebField ? normalizeFitxaWebUrl(safeValue) : '';
+  const escaped = escapeHtml(safeValue);
+
+  if (isEmailField) {
+    return `<div class="fitxa-inline-actions"><span>${escaped}</span><button class="fitxa-copy-btn" data-copy="${escaped}" type="button">Copiar</button></div>`;
+  }
+  if (phoneNumber) {
+    const safePhone = escapeHtml(phoneNumber);
+    return `<div class="fitxa-inline-actions"><span>${escaped}</span><button class="fitxa-call-btn" data-call-number="${safePhone}" type="button">Trucar</button><button class="fitxa-phone-copy-btn" data-copy-phone="${safePhone}" type="button">Copiar</button></div>`;
+  }
+  if (webUrl) {
+    const normalizedUrl = /^https?:\/\//i.test(webUrl) ? webUrl : `http://${webUrl}`;
+    return `<div class="fitxa-inline-actions"><span>${escaped}</span><button class="fitxa-web-btn" data-open-url="${escapeHtml(normalizedUrl)}" type="button">Web</button></div>`;
+  }
+
+  return escaped;
+}
+
+function buildFitxaTableRows(data) {
+  const fields = { ...(data.fields || {}) };
+  const rows = [];
+  const pullFieldByLabel = (labels) => {
+    for (const label of labels) {
+      if (!(label in fields)) continue;
+      const value = fields[label];
+      delete fields[label];
+      return Array.isArray(value) ? value.map((item) => String(item ?? '')).join(' | ') : String(value ?? '');
+    }
+    return '';
+  };
+
+  const emailValue = pullFieldByLabel([
+    'Correu electrònic del centre',
+    'Correu electrònic departamental',
+    'Correu electronic del centre',
+  ]);
+  const phoneValue = pullFieldByLabel([
+    'Telèfon del centre',
+    'Telefon del centre',
+  ]);
+  const webValue = pullFieldByLabel([
+    'URL pàgina web centre',
+    'URL pagina web centre',
+    'Web',
+    'URL',
+  ]);
+  const addressValue = pullFieldByLabel([
+    'Adreça',
+    'Adreca',
+  ]);
+  const townValue = pullFieldByLabel([
+    'Població',
+    'Poblacio',
+    'Localitat',
+    'Nom municipi',
+  ]);
+
+  rows.push(`<tr><th>Codi centre</th><td>${escapeHtml((data.centre && data.centre.code) || data.requestedCode || '')}</td></tr>`);
+  rows.push(`<tr><th>Nom centre</th><td>${escapeHtml((data.centre && data.centre.name) || '')}</td></tr>`);
+  rows.push(`<tr><th>Correu electrònic del centre</th><td>${buildFitxaCellValue('Correu electrònic del centre', emailValue || '-')}</td></tr>`);
+  rows.push(`<tr><th>Telèfon del centre</th><td>${buildFitxaCellValue('Telèfon del centre', phoneValue || '-')}</td></tr>`);
+  rows.push(`<tr><th>URL pàgina web centre</th><td>${buildFitxaCellValue('URL pàgina web centre', webValue || '-')}</td></tr>`);
+  rows.push(`<tr><th>Adreça</th><td>${buildFitxaCellValue('Adreça', addressValue || '-')}</td></tr>`);
+  rows.push(`<tr><th>Població</th><td>${buildFitxaCellValue('Població', townValue || '-')}</td></tr>`);
+
+  if (data.coordinates && data.coordinates.x && data.coordinates.y) {
+    const coordText = fields.Coordenades || `${data.coordinates.x} X | ${data.coordinates.y} Y`;
+    rows.push(
+      `<tr><th>Coordenades</th><td><div class="fitxa-inline-actions"><span>${escapeHtml(coordText)}</span><button class="fitxa-map-btn" type="button" data-map-x="${escapeHtml(data.coordinates.x)}" data-map-y="${escapeHtml(data.coordinates.y)}">Veure mapa</button></div></td></tr>`,
+    );
+  }
+
+  Object.entries(fields).forEach(([label, value]) => {
+    if (label === 'Coordenades') return;
+    const displayValue = Array.isArray(value) ? value.join(' | ') : String(value ?? '');
+    rows.push(`<tr><th>${escapeHtml(label)}</th><td>${buildFitxaCellValue(label, displayValue)}</td></tr>`);
+  });
+
+  return rows.join('');
+}
+
+function renderCentreSheetLoading(code, rowName) {
+  if (!centreSheetContentEl) return;
+  centreSheetContentEl.innerHTML = `
+    <p class="fitxa-sheet-status">Carregant la fitxa del centre...</p>
+    <div class="fitxa-sheet-table-wrap">
+      <table class="fitxa-sheet-table">
+        <tbody>
+          <tr><th>Codi centre</th><td>${escapeHtml(code || '-')}</td></tr>
+          <tr><th>Nom centre</th><td>${escapeHtml(rowName || '-')}</td></tr>
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderCentreSheetData(data) {
+  if (!centreSheetContentEl) return;
+  const isError = data.status !== 'ok';
+  centreSheetContentEl.innerHTML = `
+    ${isError ? `<p class="fitxa-sheet-status error">${escapeHtml(data.message || "No s'ha pogut carregar la fitxa del centre.")}</p>` : ''}
+    <p class="fitxa-sheet-meta">Font: <a href="${escapeHtml(data.sourceUrl || SOCRATA_SOURCE_URL)}" target="_blank" rel="noopener noreferrer">${escapeHtml(data.sourceUrl || SOCRATA_SOURCE_URL)}</a></p>
+    <div class="fitxa-sheet-table-wrap">
+      <table class="fitxa-sheet-table">
+        <tbody>${buildFitxaTableRows(data)}</tbody>
+      </table>
+    </div>
+  `;
+}
+
 function getRowValue(row, candidateFields) {
   for (const field of candidateFields) {
     const value = row[normalizeHeader(field)];
@@ -281,7 +676,12 @@ function parseCsv(text) {
     const row = {};
 
     headers.forEach((header, index) => {
-      row[normalizeHeader(header)] = (cols[index] || '').trim();
+      const normalizedKey = normalizeHeader(header);
+      let value = (cols[index] || '').trim();
+      if (normalizedKey === normalizeHeader('Codi')) {
+        value = normalizeCentreCode(value);
+      }
+      row[normalizedKey] = value;
     });
 
     if (Object.values(row).some((v) => v !== '')) {
@@ -935,6 +1335,31 @@ function renderSecondaryActionView(rows) {
       ? '<span class="text-green-600 font-bold text-xl leading-none">✓</span>'
       : '<span class="text-rose-600 font-bold text-xl leading-none">✗</span>'
   );
+  const renderInfoActions = (rowKey) => `
+    <div class="info-actions">
+      <button
+        type="button"
+        class="icon-btn centre-sheet-btn"
+        data-centre-sheet-key="${escapeHtml(rowKey)}"
+        title="Fitxa del centre"
+        aria-label="Obre la fitxa del centre"
+      >
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M3 21h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+          <path d="M5 21V10l7-4 7 4v11" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" />
+          <path d="M9 21v-5h6v5" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" />
+          <path d="M9 12h.01M15 12h.01" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        class="info-btn icon-btn"
+        data-info-key="${escapeHtml(rowKey)}"
+        title="Més informació"
+        aria-label="Obre la informació detallada"
+      >i</button>
+    </div>
+  `;
   state.managementRowsByKey = new Map(rows.map((row) => [getRowKey(row), row]));
 
   if (managementSectionTitleEl) {
@@ -1000,9 +1425,7 @@ function renderSecondaryActionView(rows) {
         <td>${escapeHtml(getRowValue(row, reasonFields))}</td>
         <td>${escapeHtml(getRowValue(row, notesFields))}</td>
         ${showDigitalAssessorNotesColumn ? `<td>${escapeHtml(getRowValue(row, digitalAssessorNotesFields))}</td>` : ''}
-        <td>
-          <button type="button" class="info-btn" data-info-key="${escapeHtml(rowKey)}" title="Més informació">i</button>
-        </td>
+        <td class="text-center">${renderInfoActions(rowKey)}</td>
       </tr>
     `;
       })()}
@@ -1083,9 +1506,7 @@ function renderSecondaryActionView(rows) {
         <td>${escapeHtml(getRowValue(row, reasonFields))}</td>
         <td>${escapeHtml(getRowValue(row, notesFields))}</td>
         <td>${escapeHtml(getRowValue(row, digitalAssessorNotesFields))}</td>
-        <td>
-          <button type="button" class="info-btn" data-info-key="${escapeHtml(rowKey)}" title="Més informació">i</button>
-        </td>
+        <td class="text-center">${renderInfoActions(rowKey)}</td>
       </tr>
     `;
   }).join('');
@@ -1225,6 +1646,37 @@ function closeCentreInfoModal() {
   centreInfoModalEl.classList.remove('flex');
 }
 
+async function openCentreSheetModal(row) {
+  if (!centreSheetModalEl || !centreSheetTitleEl || !centreSheetContentEl) return;
+
+  const nom = getRowValue(row, ['Nom']) || 'Centre';
+  const codi = getRowValue(row, ['Codi']) || '';
+  centreSheetTitleEl.textContent = codi ? `Fitxa del centre: ${nom} (${codi})` : `Fitxa del centre: ${nom}`;
+  renderCentreSheetLoading(codi, nom);
+  centreSheetModalEl.classList.remove('hidden');
+  centreSheetModalEl.classList.add('flex');
+
+  try {
+    const data = await fetchFitxaByCode(codi);
+    renderCentreSheetData(data);
+  } catch (error) {
+    renderCentreSheetData({
+      status: 'error',
+      requestedCode: codi,
+      sourceUrl: SOCRATA_SOURCE_URL,
+      message: `Error de connexió: ${error.message}`,
+      centre: { code: codi, name: nom },
+      fields: {},
+    });
+  }
+}
+
+function closeCentreSheetModal() {
+  if (!centreSheetModalEl) return;
+  centreSheetModalEl.classList.add('hidden');
+  centreSheetModalEl.classList.remove('flex');
+}
+
 function openAboutModal() {
   if (!aboutModalEl) return;
   aboutModalEl.classList.remove('hidden');
@@ -1292,6 +1744,14 @@ viewManagementBtn?.addEventListener('click', () => setActiveView('MANAGEMENT'));
 viewChartsBtn?.addEventListener('click', () => setActiveView('GRAPHS'));
 
 secondaryActionTableEl?.addEventListener('click', (event) => {
+  const centreSheetTarget = event.target.closest('[data-centre-sheet-key]');
+  if (centreSheetTarget) {
+    const rowKey = centreSheetTarget.dataset.centreSheetKey;
+    const row = state.managementRowsByKey.get(rowKey);
+    if (!row) return;
+    openCentreSheetModal(row);
+    return;
+  }
   const target = event.target.closest('[data-info-key]');
   if (!target) return;
   const rowKey = target.dataset.infoKey;
@@ -1301,6 +1761,14 @@ secondaryActionTableEl?.addEventListener('click', (event) => {
 });
 
 primaryAdvisorTableEl?.addEventListener('click', (event) => {
+  const centreSheetTarget = event.target.closest('[data-centre-sheet-key]');
+  if (centreSheetTarget) {
+    const rowKey = centreSheetTarget.dataset.centreSheetKey;
+    const row = state.managementRowsByKey.get(rowKey);
+    if (!row) return;
+    openCentreSheetModal(row);
+    return;
+  }
   const target = event.target.closest('[data-info-key]');
   if (!target) return;
   const rowKey = target.dataset.infoKey;
@@ -1310,6 +1778,14 @@ primaryAdvisorTableEl?.addEventListener('click', (event) => {
 });
 
 primaryJointActionTableEl?.addEventListener('click', (event) => {
+  const centreSheetTarget = event.target.closest('[data-centre-sheet-key]');
+  if (centreSheetTarget) {
+    const rowKey = centreSheetTarget.dataset.centreSheetKey;
+    const row = state.managementRowsByKey.get(rowKey);
+    if (!row) return;
+    openCentreSheetModal(row);
+    return;
+  }
   const target = event.target.closest('[data-info-key]');
   if (!target) return;
   const rowKey = target.dataset.infoKey;
@@ -1318,9 +1794,54 @@ primaryJointActionTableEl?.addEventListener('click', (event) => {
   openCentreInfoModal(row);
 });
 
+centreSheetContentEl?.addEventListener('click', async (event) => {
+  const target = event.target.closest('button');
+  if (!target) return;
+
+  if (target.dataset.copy) {
+    try {
+      await navigator.clipboard.writeText(target.dataset.copy);
+    } catch {
+      // Ignore clipboard failure silently in modal.
+    }
+    return;
+  }
+
+  if (target.dataset.copyPhone) {
+    try {
+      await navigator.clipboard.writeText(target.dataset.copyPhone);
+    } catch {
+      // Ignore clipboard failure silently in modal.
+    }
+    return;
+  }
+
+  if (target.dataset.callNumber) {
+    window.location.href = `tel:${target.dataset.callNumber}`;
+    return;
+  }
+
+  if (target.dataset.openUrl) {
+    window.open(target.dataset.openUrl, '_blank', 'noopener,noreferrer');
+    return;
+  }
+
+  if (target.dataset.mapX && target.dataset.mapY) {
+    openCentreMapModal(target.dataset.mapX, target.dataset.mapY);
+  }
+});
+
 closeCentreInfoBtn?.addEventListener('click', closeCentreInfoModal);
 centreInfoModalEl?.addEventListener('click', (event) => {
   if (event.target === centreInfoModalEl) closeCentreInfoModal();
+});
+closeCentreSheetBtn?.addEventListener('click', closeCentreSheetModal);
+centreSheetModalEl?.addEventListener('click', (event) => {
+  if (event.target === centreSheetModalEl) closeCentreSheetModal();
+});
+closeCentreMapBtn?.addEventListener('click', closeCentreMapModal);
+centreMapModalEl?.addEventListener('click', (event) => {
+  if (event.target === centreMapModalEl) closeCentreMapModal();
 });
 appInfoBtn?.addEventListener('click', openAboutModal);
 closeAboutModalBtn?.addEventListener('click', closeAboutModal);
