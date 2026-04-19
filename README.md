@@ -25,7 +25,6 @@ Aplicació web estàtica amb Tailwind + Chart.js per resumir CSV de discrepànci
 
 ## Notes
 
-- El repositori ja no inclou cap CSV de mostra.
 - La fitxa del centre consulta dades obertes de la Generalitat via `https://analisi.transparenciacatalunya.cat/resource/kvmv-ahh4.json`.
 - La primera vegada que s'obre un centre, la informació es descarrega en viu des d'aquesta font.
 - Durant la mateixa sessió de pàgina, si es torna a obrir el mateix centre, l'aplicació reutilitza una memòria cau del navegador i no repeteix la consulta.
