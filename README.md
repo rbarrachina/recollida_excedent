@@ -31,6 +31,15 @@ Aplicació web estàtica amb Tailwind + Chart.js per resumir CSV de discrepànci
 - El curs actual també es guarda en memòria per no recalcular-lo a cada petició de fitxa.
 - Si el codi del centre arriba amb 7 dígits i comença per `8`, l'aplicació hi afegeix automàticament un `0` inicial per normalitzar-lo a 8 dígits.
 
+## Llicències de tercers
+
+- `Tailwind CSS` es distribueix sota llicència `MIT`.
+- `Chart.js` es distribueix sota llicència `MIT`.
+- `chartjs-plugin-datalabels` es distribueix sota llicència `MIT`.
+- `Leaflet` es distribueix sota llicència `BSD 2-Clause`.
+- Les dades i tiles de mapa d'`OpenStreetMap` requereixen atribució visible. L'aplicació mostra l'atribució al mapa i aquestes dades estan subjectes a la llicència `ODbL`. Més informació a `https://www.openstreetmap.org/copyright`.
+- La icona `CC BY-SA` carregada des de Wikimedia Commons es fa servir com a recurs gràfic informatiu. Consulta la fitxa del recurs per als detalls d'ús i marca: `https://commons.wikimedia.org/wiki/File:CC_BY-SA_icon.svg`.
+
 ## Autor
 
 Rafa Barrachina
