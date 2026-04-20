@@ -1,3 +1,13 @@
+import { createScManagementController } from './sc-management.js';
+import { createManagementMapController } from './management-map.js';
+import {
+  createFitxaService,
+  normalizeCentreCode,
+  normalizeFitxaWebUrl,
+  SOCRATA_SOURCE_URL,
+} from './utils/fitxa.js';
+import { normalizeUtmCoordinatePair, utmToLatLon } from './utils/geo.js';
+
 const state = {
   educationStage: 'PRIMARIA',
   rowsByStage: {
@@ -14,6 +24,10 @@ const state = {
   },
   activeView: 'MANAGEMENT',
   managementRowsByKey: new Map(),
+  pendingActionRowsByStage: {
+    SECUNDARIA: [],
+    PRIMARIA: [],
+  },
   charts: {
     receivedVsTotal: null,
     neededReceivedDonut: null,
@@ -34,6 +48,7 @@ const globalSsttFilterEl = document.getElementById('globalSsttFilter');
 const selectedSsttDisplayEl = document.getElementById('selectedSsttDisplay');
 const viewManagementBtn = document.getElementById('viewManagementBtn');
 const viewChartsBtn = document.getElementById('viewChartsBtn');
+const viewScManagementBtn = document.getElementById('viewScManagementBtn');
 const fileTriggerEl = document.querySelector('label[for="fileInput"]');
 const summaryCardsEl = document.getElementById('summaryCards');
 const chartsGridSectionEl = document.getElementById('chartsGridSection');
@@ -41,6 +56,14 @@ const primaryCallChartCardEl = document.getElementById('primaryCallChartCard');
 const bySsttSectionEl = document.getElementById('bySsttSection');
 const neededReceivedSectionEl = document.getElementById('neededReceivedSection');
 const yesNoSectionEl = document.getElementById('yesNoSection');
+const scManagementSectionEl = document.getElementById('scManagementSection');
+const scMapEl = document.getElementById('scMap');
+const scCentreCountEl = document.getElementById('scCentreCount');
+const scExcedentsTotalEl = document.getElementById('scExcedentsTotal');
+const scRetiredTotalEl = document.getElementById('scRetiredTotal');
+const scToRetireTotalEl = document.getElementById('scToRetireTotal');
+const scCentreNameEl = document.getElementById('scCentreName');
+const scCentreMetaEl = document.getElementById('scCentreMeta');
 const secondaryActionSectionEl = document.getElementById('secondaryActionSection');
 const managementSectionTitleEl = document.getElementById('managementSectionTitle');
 const managementSectionSubtitleEl = document.getElementById('managementSectionSubtitle');
@@ -61,6 +84,10 @@ const closeCentreMapBtn = document.getElementById('closeCentreMapBtn');
 const centreMapFrameEl = document.getElementById('centreMapFrame');
 const openCentreMapLinkEl = document.getElementById('openCentreMapLink');
 const centreMapCoordsLabelEl = document.getElementById('centreMapCoordsLabel');
+const managementMapModalEl = document.getElementById('managementMapModal');
+const managementMapEl = document.getElementById('managementMap');
+const managementMapSummaryEl = document.getElementById('managementMapSummary');
+const closeManagementMapBtn = document.getElementById('closeManagementMapBtn');
 const aboutModalEl = document.getElementById('aboutModal');
 const closeAboutModalBtn = document.getElementById('closeAboutModalBtn');
 const stageMismatchModalEl = document.getElementById('stageMismatchModal');
@@ -68,51 +95,31 @@ const closeStageMismatchBtn = document.getElementById('closeStageMismatchBtn');
 const stageMismatchTextEl = document.getElementById('stageMismatchText');
 const yesNoTableEl = document.getElementById('yesNoTable');
 const neededReceivedTableEl = document.getElementById('neededReceivedTable');
-const SOCRATA_RESOURCE_URL = 'https://analisi.transparenciacatalunya.cat/resource/kvmv-ahh4.json';
-const SOCRATA_SOURCE_URL = 'https://analisi.transparenciacatalunya.cat/d/kvmv-ahh4';
-const FITXA_KEY_LABELS = {
-  any: 'Any',
-  curs: 'Curs',
-  codi_centre: 'Codi centre',
-  denominaci_completa: 'Nom centre',
-  codi_naturalesa: 'Codi naturalesa',
-  nom_naturalesa: 'Naturalesa',
-  codi_titularitat: 'Codi titularitat',
-  nom_titularitat: 'Titularitat',
-  adre_a: 'Adreça',
-  codi_postal: 'Codi postal',
-  tel_fon: 'Telèfon del centre',
-  codi_delegaci: 'Codi delegació',
-  nom_delegaci: 'Àrea Territorial',
-  codi_comarca: 'Codi comarca',
-  nom_comarca: 'Comarca',
-  codi_municipi: 'Codi municipi',
-  codi_municipi_6: 'Codi municipi (6)',
-  nom_municipi: 'Població',
-  codi_districte_municipal: 'Codi districte municipal',
-  nom_dm: 'Nom districte municipal',
-  codi_localitat: 'Codi localitat',
-  nom_localitat: 'Localitat',
-  coordenades_utm_x: 'Coordenada UTM X',
-  coordenades_utm_y: 'Coordenada UTM Y',
-  coordenades_geo_x: 'Coordenada Geo X',
-  coordenades_geo_y: 'Coordenada Geo Y',
-  e_mail_centre: 'Correu electrònic del centre',
-  url: 'URL pàgina web centre',
-  imatge: 'Imatge',
-  geo_1: 'Geo 1',
-};
-const FITXA_PRIORITY_KEYS = [
-  'any', 'curs', 'codi_naturalesa', 'nom_naturalesa', 'codi_titularitat', 'nom_titularitat', 'adre_a',
-  'codi_postal', 'tel_fon', 'codi_delegaci', 'nom_delegaci', 'codi_comarca', 'nom_comarca', 'codi_municipi',
-  'codi_municipi_6', 'nom_municipi', 'codi_districte_municipal', 'nom_dm', 'codi_localitat', 'nom_localitat',
-  'coordenades_utm_x', 'coordenades_utm_y', 'coordenades_geo_x', 'coordenades_geo_y', 'e_mail_centre', 'url',
-  'imatge', 'einf1c', 'einf2c', 'epri', 'eso', 'batx', 'aa01', 'cfpm', 'ppas', 'aa03', 'cfps', 'ee', 'ife',
-  'pfi', 'pa01', 'cfam', 'pa02', 'cfas', 'esdi', 'escm', 'escs', 'adr', 'crbc', 'idi', 'dane', 'danp', 'dans',
-  'muse', 'musp', 'muss', 'tegm', 'tegs', 'estr', 'adults', 'geo_1',
-];
-let fitxaCurrentCoursePromise = null;
-const fitxaCacheByCode = new Map();
+const { fetchFitxaByCode } = createFitxaService();
+const scManagementController = createScManagementController({
+  scManagementSectionEl,
+  scMapEl,
+  scCentreCountEl,
+  scExcedentsTotalEl,
+  scRetiredTotalEl,
+  scToRetireTotalEl,
+  scCentreNameEl,
+  scCentreMetaEl,
+  normalizeHeader,
+  normalizeBoolean,
+  fetchFitxaByCode,
+});
+const managementMapController = createManagementMapController({
+  managementMapModalEl,
+  managementMapEl,
+  managementMapSummaryEl,
+  closeManagementMapBtn,
+  fetchFitxaByCode,
+  getRowValue,
+  normalizeHeader,
+  normalizeBoolean,
+  escapeHtml,
+});
 
 const receivedVsTotalCtx = document.getElementById('receivedVsTotalChart').getContext('2d');
 const neededReceivedDonutCtx = document.getElementById('neededReceivedDonutChart').getContext('2d');
@@ -235,12 +242,6 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
-function normalizeFitxaWebUrl(value) {
-  const raw = String(value || '').trim();
-  if (!raw || raw === '0' || raw === '-') return '';
-  return raw;
-}
-
 function normalizeFitxaPhoneNumber(value) {
   const raw = String(value || '').trim();
   if (!raw || raw === '-' || raw === '0') return '';
@@ -255,21 +256,6 @@ function normalizeFitxaPhoneNumber(value) {
   return sanitized;
 }
 
-function normalizeCentreCode(value) {
-  const raw = String(value || '').trim();
-  if (/^8\d{6}$/.test(raw)) return `0${raw}`;
-  return raw;
-}
-
-function fitxaEscapeSoql(value) {
-  return String(value || '').replaceAll("'", "''");
-}
-
-function fitxaToInt(value) {
-  const parsed = Number(getTextValue(value));
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
 function getTextValue(value) {
   if (value === null || value === undefined) return '';
   if (typeof value === 'string') return value.trim();
@@ -281,161 +267,6 @@ function getTextValue(value) {
   }
 }
 
-function prettifyFitxaKey(key) {
-  if (FITXA_KEY_LABELS[key]) return FITXA_KEY_LABELS[key];
-  return key
-    .replaceAll('_', ' ')
-    .replace(/\b\w/g, (match) => match.toUpperCase());
-}
-
-function pickBestFitxaRow(rows) {
-  if (!rows.length) return null;
-  return [...rows].sort((a, b) => {
-    const yearDiff = fitxaToInt(b.any) - fitxaToInt(a.any);
-    if (yearDiff !== 0) return yearDiff;
-    const courseDiff = fitxaToInt(b.curs) - fitxaToInt(a.curs);
-    if (courseDiff !== 0) return courseDiff;
-    const aScore = Object.values(a).filter((value) => getTextValue(value)).length;
-    const bScore = Object.values(b).filter((value) => getTextValue(value)).length;
-    return bScore - aScore;
-  })[0];
-}
-
-function rowToOrderedFitxaFields(row) {
-  const fields = {};
-  const ignored = new Set(['codi_centre', 'denominaci_completa']);
-  const keys = Object.keys(row).filter((key) => !ignored.has(key));
-  const priorityPresent = FITXA_PRIORITY_KEYS.filter((key) => keys.includes(key));
-  const rest = keys.filter((key) => !priorityPresent.includes(key)).sort((a, b) => a.localeCompare(b, 'ca'));
-  [...priorityPresent, ...rest].forEach((key) => {
-    fields[prettifyFitxaKey(key)] = getTextValue(row[key]) || '-';
-  });
-  return fields;
-}
-
-async function getCurrentFitxaCourse() {
-  if (fitxaCurrentCoursePromise) return fitxaCurrentCoursePromise;
-  fitxaCurrentCoursePromise = (async () => {
-    const query = 'SELECT max(curs) as current_curs WHERE curs is not null';
-    const response = await fetch(`${SOCRATA_RESOURCE_URL}?$query=${encodeURIComponent(query)}`);
-    const rows = await response.json();
-    if (!response.ok || !Array.isArray(rows) || !rows.length || !getTextValue(rows[0]?.current_curs)) {
-      throw new Error("No s'ha pogut determinar el curs actual.");
-    }
-    return getTextValue(rows[0].current_curs);
-  })();
-  return fitxaCurrentCoursePromise;
-}
-
-async function fetchFitxaSocrataRows(whereClause, limit = 5) {
-  const currentCourse = await getCurrentFitxaCourse();
-  const query = `SELECT * WHERE curs = '${fitxaEscapeSoql(currentCourse)}' AND (${whereClause}) ORDER BY any DESC, curs DESC LIMIT ${limit}`;
-  const response = await fetch(`${SOCRATA_RESOURCE_URL}?$query=${encodeURIComponent(query)}`);
-  const raw = await response.text();
-  let rows = null;
-  try {
-    rows = JSON.parse(raw);
-  } catch {
-    if (raw.trim().startsWith('<!DOCTYPE') || raw.trim().startsWith('<html')) {
-      throw new Error("L'API ha retornat HTML en lloc de JSON.");
-    }
-    throw new Error("Resposta no vàlida de l'API.");
-  }
-  if (!response.ok) {
-    const message = Array.isArray(rows) ? "Error consultant l'API de dades obertes." : (rows?.message || "Error consultant l'API de dades obertes.");
-    throw new Error(message);
-  }
-  return Array.isArray(rows) ? rows : [];
-}
-
-function rowToFitxaData(code, row) {
-  if (!row) {
-    return {
-      status: 'not_found',
-      requestedCode: code,
-      sourceUrl: SOCRATA_SOURCE_URL,
-      message: "No s'ha trobat cap centre amb aquest codi.",
-      fields: {},
-    };
-  }
-
-  const webValue = normalizeFitxaWebUrl(row.url);
-  const x = getTextValue(row.coordenades_utm_x);
-  const y = getTextValue(row.coordenades_utm_y);
-  const fields = rowToOrderedFitxaFields(row);
-  if (webValue) fields['URL pàgina web centre'] = webValue;
-  if (x && y) fields.Coordenades = `${x} X | ${y} Y`;
-
-  return {
-    status: 'ok',
-    requestedCode: code,
-    sourceUrl: SOCRATA_SOURCE_URL,
-    centre: {
-      code: getTextValue(row.codi_centre || code).trim(),
-      name: getTextValue(row.denominaci_completa).trim() || '-',
-    },
-    coordinates: { x, y },
-    fields,
-  };
-}
-
-async function fetchFitxaByCode(code) {
-  const normalizedCode = normalizeCentreCode(code);
-  if (!/^\d{8}$/.test(normalizedCode)) {
-    return {
-      status: 'not_found',
-      requestedCode: normalizedCode,
-      sourceUrl: SOCRATA_SOURCE_URL,
-      message: 'El codi del centre no és vàlid.',
-      fields: {},
-    };
-  }
-  if (fitxaCacheByCode.has(normalizedCode)) return fitxaCacheByCode.get(normalizedCode);
-  const rows = await fetchFitxaSocrataRows(`codi_centre = '${fitxaEscapeSoql(normalizedCode)}'`, 5);
-  const data = rowToFitxaData(normalizedCode, pickBestFitxaRow(rows));
-  fitxaCacheByCode.set(normalizedCode, data);
-  return data;
-}
-
-function utmToLatLon(zone, easting, northing, isNorthernHemisphere) {
-  const a = 6378137.0;
-  const f = 1 / 298.257223563;
-  const k0 = 0.9996;
-  const eccSquared = f * (2 - f);
-  const eccPrimeSquared = eccSquared / (1 - eccSquared);
-  const e1 = (1 - Math.sqrt(1 - eccSquared)) / (1 + Math.sqrt(1 - eccSquared));
-  const x = easting - 500000.0;
-  let y = northing;
-  if (!isNorthernHemisphere) y -= 10000000.0;
-  const longOrigin = (zone - 1) * 6 - 180 + 3;
-  const m = y / k0;
-  const mu = m / (a * (1 - eccSquared / 4 - (3 * eccSquared * eccSquared) / 64 - (5 * eccSquared * eccSquared * eccSquared) / 256));
-  const phi1Rad = mu
-    + ((3 * e1) / 2 - (27 * e1 ** 3) / 32) * Math.sin(2 * mu)
-    + ((21 * e1 * e1) / 16 - (55 * e1 ** 4) / 32) * Math.sin(4 * mu)
-    + ((151 * e1 ** 3) / 96) * Math.sin(6 * mu)
-    + ((1097 * e1 ** 4) / 512) * Math.sin(8 * mu);
-  const n1 = a / Math.sqrt(1 - eccSquared * Math.sin(phi1Rad) ** 2);
-  const t1 = Math.tan(phi1Rad) ** 2;
-  const c1 = eccPrimeSquared * Math.cos(phi1Rad) ** 2;
-  const r1 = (a * (1 - eccSquared)) / Math.pow(1 - eccSquared * Math.sin(phi1Rad) ** 2, 1.5);
-  const d = x / (n1 * k0);
-  const latRad = phi1Rad - ((n1 * Math.tan(phi1Rad)) / r1) * (
-    (d * d) / 2
-    - ((5 + 3 * t1 + 10 * c1 - 4 * c1 * c1 - 9 * eccPrimeSquared) * d ** 4) / 24
-    + ((61 + 90 * t1 + 298 * c1 + 45 * t1 * t1 - 252 * eccPrimeSquared - 3 * c1 * c1) * d ** 6) / 720
-  );
-  const lonRad = (
-    d
-    - ((1 + 2 * t1 + c1) * d ** 3) / 6
-    + ((5 - 2 * c1 + 28 * t1 - 3 * c1 * c1 + 8 * eccPrimeSquared + 24 * t1 * t1) * d ** 5) / 120
-  ) / Math.cos(phi1Rad);
-
-  return {
-    lat: (latRad * 180) / Math.PI,
-    lon: longOrigin + (lonRad * 180) / Math.PI,
-  };
-}
 
 function closeCentreMapModal() {
   if (!centreMapModalEl || !centreMapFrameEl) return;
@@ -446,8 +277,7 @@ function closeCentreMapModal() {
 
 function openCentreMapModal(xValue, yValue) {
   if (!centreMapModalEl || !centreMapFrameEl || !openCentreMapLinkEl || !centreMapCoordsLabelEl) return;
-  const x = Number(xValue);
-  const y = Number(yValue);
+  const { x, y } = normalizeUtmCoordinatePair(xValue, yValue);
   if (!Number.isFinite(x) || !Number.isFinite(y)) return;
   const converted = utmToLatLon(31, x, y, true);
   const { lat, lon } = converted;
@@ -881,17 +711,27 @@ function getFilteredRowsByGlobalSstt(rows) {
 }
 
 function applyActiveView() {
-  const showManagement = state.activeView === 'MANAGEMENT';
+  const showManagement = state.activeView === 'MANAGEMENT' || state.activeView === 'SC_MANAGEMENT';
+  const showCharts = state.activeView === 'GRAPHS';
+  const showScManagement = state.activeView === 'SC_MANAGEMENT';
+  const showScButton = true;
 
-  secondaryActionSectionEl?.classList.toggle('hidden', !showManagement);
-  summaryCardsEl?.classList.toggle('hidden', showManagement);
-  chartsGridSectionEl?.classList.toggle('hidden', showManagement);
-  bySsttSectionEl?.classList.toggle('hidden', showManagement);
-  neededReceivedSectionEl?.classList.toggle('hidden', showManagement);
-  yesNoSectionEl?.classList.toggle('hidden', showManagement);
+  secondaryActionSectionEl?.classList.toggle('hidden', !showManagement || showScManagement);
+  scManagementSectionEl?.classList.toggle('hidden', !showScManagement);
+  summaryCardsEl?.classList.toggle('hidden', !showCharts);
+  chartsGridSectionEl?.classList.toggle('hidden', !showCharts);
+  bySsttSectionEl?.classList.toggle('hidden', !showCharts);
+  neededReceivedSectionEl?.classList.toggle('hidden', !showCharts);
+  yesNoSectionEl?.classList.toggle('hidden', !showCharts);
 
-  viewManagementBtn?.classList.toggle('active', showManagement);
-  viewChartsBtn?.classList.toggle('active', !showManagement);
+  viewManagementBtn?.classList.toggle('active', state.activeView === 'MANAGEMENT');
+  viewChartsBtn?.classList.toggle('active', showCharts);
+  viewScManagementBtn?.classList.toggle('hidden', !showScButton);
+  viewScManagementBtn?.classList.toggle('active', showScManagement);
+
+  if (showScManagement) {
+    renderScManagementView();
+  }
 }
 
 function setActiveView(view) {
@@ -963,6 +803,17 @@ function updateChartsLayoutForStage() {
   primaryCallChartCardEl?.classList.remove('hidden');
   chartsGridSectionEl?.classList.remove('lg:grid-cols-2');
   chartsGridSectionEl?.classList.add('lg:grid-cols-3');
+}
+
+function renderScManagementView() {
+  const stageConfig = getActiveStageConfig();
+  const rows = state.rowsByStage[state.educationStage] || [];
+  const filteredRows = getFilteredRowsByGlobalSstt(rows);
+  scManagementController.render(filteredRows, {
+    stage: state.educationStage,
+    neededField: stageConfig.summary.neededField,
+    receivedField: stageConfig.summary.receivedField,
+  });
 }
 
 function renderSummary(rows) {
@@ -1429,11 +1280,20 @@ function renderSecondaryActionView(rows) {
     const nomB = getRowValue(b, nomFields).toString();
     return codiA.localeCompare(codiB, 'ca', { numeric: true }) || nomA.localeCompare(nomB);
   });
+  state.pendingActionRowsByStage[state.educationStage] = combinedRows;
 
   secondaryActionCountEl.innerHTML = `
-    <span class="management-count-number block text-center text-5xl font-extrabold leading-none">${combinedRows.length}</span>
-    <span class="management-count-label mt-1 block text-center text-base">centres pendents d'actuació</span>
+    <span class="management-count-panel">
+      <span class="management-count-top">
+      <span class="management-count-number text-5xl font-extrabold leading-none">${combinedRows.length}</span>
+      <button id="managementMapBtnInline" type="button" class="management-map-btn"${combinedRows.length === 0 ? ' disabled' : ''}>Mapa</button>
+      </span>
+      <span class="management-count-label mt-1 block text-base">centres pendents d'actuació</span>
+    </span>
   `;
+  document.getElementById('managementMapBtnInline')?.addEventListener('click', () => {
+    managementMapController.open(state.pendingActionRowsByStage[state.educationStage] || []);
+  });
 
   if (!combinedRows.length) {
     secondaryActionTableEl.innerHTML = `
@@ -1774,6 +1634,7 @@ globalSsttFilterEl?.addEventListener('change', (event) => {
 
 viewManagementBtn?.addEventListener('click', () => setActiveView('MANAGEMENT'));
 viewChartsBtn?.addEventListener('click', () => setActiveView('GRAPHS'));
+viewScManagementBtn?.addEventListener('click', () => setActiveView('SC_MANAGEMENT'));
 
 secondaryActionTableEl?.addEventListener('click', (event) => {
   const centreSheetTarget = event.target.closest('[data-centre-sheet-key]');
@@ -1863,6 +1724,7 @@ closeCentreMapBtn?.addEventListener('click', closeCentreMapModal);
 centreMapModalEl?.addEventListener('click', (event) => {
   if (event.target === centreMapModalEl) closeCentreMapModal();
 });
+managementMapController.bindStaticEvents();
 appInfoBtn?.addEventListener('click', openAboutModal);
 closeAboutModalBtn?.addEventListener('click', closeAboutModal);
 aboutModalEl?.addEventListener('click', (event) => {
