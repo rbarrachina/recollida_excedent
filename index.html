@@ -3,11 +3,28 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <title>Resum de discrepàncies d'excedent PEDC</title>
-    <link rel="stylesheet" href="./src/styles.css" />
+    <script>
+      window.APP_ASSET_VERSION = '42';
+      document.write(`<link rel="stylesheet" href="./src/styles.css?v=${window.APP_ASSET_VERSION}" />`);
+    </script>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
   </head>
   <body class="min-h-screen bg-slate-100 text-slate-900">
     <main class="mx-auto max-w-[96rem] p-4 sm:p-6 lg:p-8">
@@ -43,6 +60,7 @@
           <div class="flex items-center gap-2">
             <button id="viewManagementBtn" class="action-btn active" type="button">Gestió</button>
             <button id="viewChartsBtn" class="action-btn" type="button">Gràfics</button>
+            <button id="viewScManagementBtn" class="action-btn hidden" type="button">Gestió SC</button>
           </div>
           <p id="selectedSsttDisplay" class="sstt-display">-</p>
         </div>
@@ -54,6 +72,47 @@
       </section>
 
       <div id="dashboard" class="hidden">
+      <section id="scManagementSection" class="mb-6 hidden rounded-2xl bg-white p-4 shadow">
+        <div class="mb-4 flex flex-wrap items-start justify-between gap-4">
+          <div class="flex flex-wrap items-baseline gap-3">
+            <h2 class="text-lg font-semibold">Gestió SC - Recollida Juny:</h2>
+            <p class="text-sm text-slate-500">Mapa de Catalunya amb els centres filtrats per SSTT, colors segons l'estat d'e-Valisa i el nombre d'equips retirats visible directament sobre cada centre.</p>
+          </div>
+          <div class="sc-management-stats">
+            <div class="sc-stat-card">
+              <p class="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">Centres al mapa</p>
+              <p id="scCentreCount" class="mt-1 text-3xl font-extrabold text-sky-950">-</p>
+            </div>
+            <div class="sc-stat-card">
+              <p class="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">Ordinadors Excedents</p>
+              <p id="scExcedentsTotal" class="mt-1 text-3xl font-extrabold text-sky-950">-</p>
+            </div>
+            <div class="sc-stat-card">
+              <p class="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">Ordinadors Retirats</p>
+              <p id="scRetiredTotal" class="mt-1 text-3xl font-extrabold text-sky-950">-</p>
+            </div>
+            <div class="sc-stat-card">
+              <p class="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">Ordinadors a Retirar</p>
+              <p id="scToRetireTotal" class="mt-1 text-3xl font-extrabold text-sky-950">-</p>
+            </div>
+          </div>
+        </div>
+        <div class="sc-map-layout">
+          <div class="sc-map-shell">
+            <div id="scMap" class="sc-map" aria-label="Mapa de Catalunya amb centre destacat"></div>
+            <div id="scMapFilters" class="sc-map-legend sc-map-legend-overlay">
+              <label class="sc-map-legend-item"><input id="scFilterReceivedYes" type="checkbox" checked /> <span class="sc-map-legend-dot received-yes"></span>e-Valisa necessària = SI i e-Valisa rebuda = SI</label>
+              <label class="sc-map-legend-item"><input id="scFilterNeededYes" type="checkbox" checked /> <span class="sc-map-legend-dot needed-yes"></span>e-Valisa necessària = SI i e-Valisa rebuda = NO/Blanc</label>
+              <label class="sc-map-legend-item"><input id="scFilterNeededNo" type="checkbox" /> <span class="sc-map-legend-dot needed-no"></span>e-Valisa necessària = NO</label>
+            </div>
+          </div>
+          <aside class="sc-map-note">
+            <p class="sc-map-note-label">Centres mostrats</p>
+            <h3 id="scCentreName" class="sc-map-note-title">Resum del mapa</h3>
+            <p id="scCentreMeta" class="sc-map-note-text">-</p>
+          </aside>
+        </div>
+      </section>
       <section id="secondaryActionSection" class="mb-6 rounded-2xl bg-white p-4 shadow">
         <div class="mb-3 flex flex-wrap items-start justify-between gap-4">
           <div class="min-w-[260px]">
@@ -159,7 +218,20 @@
         </div>
       </div>
 
-      <div id="aboutModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/40 p-4">
+      <div id="managementMapModal" class="fixed inset-0 z-[65] hidden items-center justify-center bg-slate-900/45 p-4">
+        <div class="map-modal-card w-full max-w-5xl rounded-2xl bg-white shadow-2xl">
+          <div class="modal-header flex items-center justify-between px-5 py-4">
+            <h3 class="modal-title text-lg font-semibold">Mapa de centres pendents d'actuació</h3>
+            <button id="closeManagementMapBtn" type="button" class="modal-close rounded-md px-2 py-1">Tanca</button>
+          </div>
+          <div class="p-5">
+            <p id="managementMapSummary" class="mb-3 text-sm text-slate-600"></p>
+            <div id="managementMap" class="management-map-frame" aria-label="Mapa dels centres pendents d'actuació"></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="aboutModal" class="fixed inset-0 hidden items-center justify-center bg-slate-900/40 p-4" style="z-index: 1000;">
         <div class="about-modal-card w-full max-w-md p-6">
           <div class="mb-5 flex items-center justify-between">
             <div class="flex items-center gap-3">
@@ -197,6 +269,8 @@
       </div>
     </main>
 
-    <script type="module" src="./src/app.js?v=34"></script>
+    <script>
+      document.write(`<script type="module" src="./src/app.js?v=${window.APP_ASSET_VERSION}"><\/script>`);
+    </script>
   </body>
 </html>
