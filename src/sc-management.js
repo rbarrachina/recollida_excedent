@@ -1,5 +1,21 @@
 import { getFitxaLatLon } from './utils/geo.js';
 
+const TERRITORIAL_SERVICES_URL = 'data/serveis-territorials-simplificat.geojson';
+const SSTT_TO_TERRITORIAL_SERVICE_CODE = {
+  APA: '1160',
+  BLL: '0308',
+  BNS: '0208',
+  CCE: '1060',
+  CEB: '0108',
+  GIR: '0117',
+  LLE: '0125',
+  MVO: '0508',
+  PEN: '1260',
+  TAR: '0143',
+  TEB: '0243',
+  VOC: '0408',
+};
+
 const SC_MAP_CENTRE = {
   name: 'Institut Sant Elm',
   code: '17003306',
@@ -24,6 +40,8 @@ export function createScManagementController({
 }) {
   let scLeafletMap = null;
   let scLeafletLayer = null;
+  let scTerritorialServicesLayer = null;
+  let territorialServicesPromise = null;
   let renderRequestId = 0;
   let lastRows = [];
   let lastConfig = {};
@@ -39,6 +57,63 @@ export function createScManagementController({
     if (centre.evalisaReceived) return 'received-yes';
     if (centre.evalisaNeeded) return 'needed-yes';
     return 'needed-no';
+  }
+
+  async function loadTerritorialServices() {
+    if (!territorialServicesPromise) {
+      territorialServicesPromise = fetch(TERRITORIAL_SERVICES_URL)
+        .then((response) => {
+          if (!response.ok) throw new Error('No s\'ha pogut carregar el GeoJSON dels SSTT');
+          return response.json();
+        })
+        .then((geojson) => (Array.isArray(geojson.features) ? geojson.features : []))
+        .catch(() => []);
+    }
+    return territorialServicesPromise;
+  }
+
+  function getVisibleTerritorialServiceCodes(rows) {
+    const ssttField = normalizeHeader('SSTT');
+    const rowSstt = [...new Set(rows
+      .map((row) => String(row[ssttField] || '').trim())
+      .filter(Boolean))];
+    const visibleSstt = rowSstt.length === 1
+      ? rowSstt
+      : Object.keys(SSTT_TO_TERRITORIAL_SERVICE_CODE);
+
+    return new Set(visibleSstt
+      .map((sstt) => SSTT_TO_TERRITORIAL_SERVICE_CODE[sstt])
+      .filter(Boolean));
+  }
+
+  async function renderTerritorialServices(rows, requestId) {
+    if (!scLeafletMap) return null;
+    if (scTerritorialServicesLayer) {
+      scTerritorialServicesLayer.remove();
+      scTerritorialServicesLayer = null;
+    }
+
+    const visibleCodes = getVisibleTerritorialServiceCodes(rows);
+    if (!visibleCodes.size) return null;
+
+    const features = (await loadTerritorialServices())
+      .filter((feature) => visibleCodes.has(String(feature?.properties?.codi || '')));
+
+    if (requestId !== renderRequestId) return null;
+    if (!features.length) return null;
+
+    scTerritorialServicesLayer = L.geoJSON(features, {
+      interactive: false,
+      style: {
+        color: '#a8141a',
+        weight: 1.5,
+        opacity: 0.95,
+        fillColor: '#d8232a',
+        fillOpacity: 0.32,
+      },
+    }).addTo(scLeafletMap);
+    scTerritorialServicesLayer.bringToBack();
+    return scTerritorialServicesLayer;
   }
 
   function isToneVisible(tone) {
@@ -234,6 +309,8 @@ export function createScManagementController({
     }
 
     scLeafletLayer.clearLayers();
+    const visibleTerritorialLayer = await renderTerritorialServices(rows, requestId);
+    if (requestId !== renderRequestId) return;
 
     const centresWithCoordinates = await enrichCentresWithCoordinates(centres);
     if (requestId !== renderRequestId) return;
@@ -286,7 +363,8 @@ export function createScManagementController({
       if (scToRetireTotalEl) scToRetireTotalEl.textContent = String(visibleToRetire);
       scCentreMetaEl.innerHTML = summaryHtml;
       if (!options.preserveView) {
-        scLeafletMap.fitBounds(bounds, {
+        const fitBounds = visibleTerritorialLayer ? visibleTerritorialLayer.getBounds() : bounds;
+        scLeafletMap.fitBounds(fitBounds, {
           paddingTopLeft: [16, 44],
           paddingBottomRight: [16, 12],
         });
@@ -300,10 +378,17 @@ export function createScManagementController({
         ? summaryHtml
         : (missingCoordinates ? `Sense coordenades: ${missingCoordinates}` : 'No s\'han pogut obtenir coordenades.');
       if (!options.preserveView) {
-        scLeafletMap.fitBounds([
-          [42.95, 0.15],
-          [40.45, 3.5],
-        ]);
+        if (visibleTerritorialLayer) {
+          scLeafletMap.fitBounds(visibleTerritorialLayer.getBounds(), {
+            paddingTopLeft: [16, 44],
+            paddingBottomRight: [16, 12],
+          });
+        } else {
+          scLeafletMap.fitBounds([
+            [42.95, 0.15],
+            [40.45, 3.5],
+          ]);
+        }
       }
     }
 

@@ -1,5 +1,21 @@
 import { getFitxaLatLon } from './utils/geo.js';
 
+const TERRITORIAL_SERVICES_URL = 'data/serveis-territorials-simplificat.geojson';
+const SSTT_TO_TERRITORIAL_SERVICE_CODE = {
+  APA: '1160',
+  BLL: '0308',
+  BNS: '0208',
+  CCE: '1060',
+  CEB: '0108',
+  GIR: '0117',
+  LLE: '0125',
+  MVO: '0508',
+  PEN: '1260',
+  TAR: '0143',
+  TEB: '0243',
+  VOC: '0408',
+};
+
 export function createManagementMapController({
   managementMapModalEl,
   managementMapEl,
@@ -13,7 +29,61 @@ export function createManagementMapController({
 }) {
   let leafletMap = null;
   let leafletLayer = null;
+  let territorialServicesLayer = null;
+  let territorialServicesPromise = null;
   let renderId = 0;
+
+  async function loadTerritorialServices() {
+    if (!territorialServicesPromise) {
+      territorialServicesPromise = fetch(TERRITORIAL_SERVICES_URL)
+        .then((response) => {
+          if (!response.ok) throw new Error('No s\'ha pogut carregar el GeoJSON dels SSTT');
+          return response.json();
+        })
+        .then((geojson) => (Array.isArray(geojson.features) ? geojson.features : []))
+        .catch(() => []);
+    }
+    return territorialServicesPromise;
+  }
+
+  function getVisibleTerritorialServiceCodes(selectedSstt) {
+    const selected = String(selectedSstt || '').trim();
+    if (selected && selected !== 'ALL') {
+      const territorialCode = SSTT_TO_TERRITORIAL_SERVICE_CODE[selected];
+      return territorialCode ? new Set([territorialCode]) : new Set();
+    }
+    return new Set(Object.values(SSTT_TO_TERRITORIAL_SERVICE_CODE));
+  }
+
+  async function renderTerritorialServices(selectedSstt, currentRenderId) {
+    if (!leafletMap) return null;
+    if (territorialServicesLayer) {
+      territorialServicesLayer.remove();
+      territorialServicesLayer = null;
+    }
+
+    const visibleCodes = getVisibleTerritorialServiceCodes(selectedSstt);
+    if (!visibleCodes.size) return null;
+
+    const features = (await loadTerritorialServices())
+      .filter((feature) => visibleCodes.has(String(feature?.properties?.codi || '')));
+
+    if (currentRenderId !== renderId) return null;
+    if (!features.length) return null;
+
+    territorialServicesLayer = L.geoJSON(features, {
+      interactive: false,
+      style: {
+        color: '#a8141a',
+        weight: 1.5,
+        opacity: 0.95,
+        fillColor: '#d8232a',
+        fillOpacity: 0.32,
+      },
+    }).addTo(leafletMap);
+    territorialServicesLayer.bringToBack();
+    return territorialServicesLayer;
+  }
 
   function close() {
     if (!managementMapModalEl) return;
@@ -21,14 +91,15 @@ export function createManagementMapController({
     managementMapModalEl.classList.remove('flex');
   }
 
-  async function open(pendingRows = []) {
+  async function open(pendingRows = [], selectedSstt = 'ALL') {
     if (!managementMapModalEl || !managementMapEl || !managementMapSummaryEl) return;
     const callDoneFields = ['Trucada realitzada'];
-    if (!pendingRows.length) return;
 
     managementMapModalEl.classList.remove('hidden');
     managementMapModalEl.classList.add('flex');
-    managementMapSummaryEl.textContent = `Carregant ${pendingRows.length} centres pendents d'actuació...`;
+    managementMapSummaryEl.textContent = pendingRows.length
+      ? `Carregant ${pendingRows.length} centres pendents d'actuació...`
+      : 'Carregant el mapa del Servei Territorial...';
 
     if (typeof L === 'undefined') {
       managementMapEl.innerHTML = `<div class="flex h-full items-center justify-center p-6 text-center text-slate-500">No s'ha pogut carregar el mapa.</div>`;
@@ -51,6 +122,9 @@ export function createManagementMapController({
 
     leafletLayer?.clearLayers();
     const currentRenderId = ++renderId;
+    const visibleTerritorialLayer = await renderTerritorialServices(selectedSstt, currentRenderId);
+
+    if (currentRenderId !== renderId) return;
 
     const locatedRows = (await Promise.all(pendingRows.map(async (row) => {
       const code = getRowValue(row, ['Codi']).toString().trim();
@@ -77,7 +151,9 @@ export function createManagementMapController({
     const missingCoordinates = pendingRows.length - locatedRows.length;
     const doneCount = locatedRows.filter((item) => item.callDone).length;
     const pendingCount = locatedRows.length - doneCount;
-    managementMapSummaryEl.textContent = `${locatedRows.length} centres ubicats · ${pendingCount} amb trucada pendent · ${doneCount} amb trucada feta${missingCoordinates ? ` · ${missingCoordinates} sense coordenades` : ''}`;
+    managementMapSummaryEl.textContent = pendingRows.length
+      ? `${locatedRows.length} centres ubicats · ${pendingCount} amb trucada pendent · ${doneCount} amb trucada feta${missingCoordinates ? ` · ${missingCoordinates} sense coordenades` : ''}`
+      : '0 centres pendents d\'actuació · només es mostra el Servei Territorial';
 
     const bounds = [];
     locatedRows.forEach((item) => {
@@ -97,7 +173,9 @@ export function createManagementMapController({
 
     window.setTimeout(() => {
       leafletMap?.invalidateSize();
-      if (locatedRows.length) {
+      if (visibleTerritorialLayer) {
+        leafletMap?.fitBounds(visibleTerritorialLayer.getBounds(), { padding: [24, 24] });
+      } else if (locatedRows.length) {
         leafletMap?.fitBounds(bounds, { padding: [24, 24] });
       } else {
         leafletMap?.fitBounds([

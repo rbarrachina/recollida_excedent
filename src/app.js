@@ -1286,13 +1286,16 @@ function renderSecondaryActionView(rows) {
     <span class="management-count-panel">
       <span class="management-count-top">
       <span class="management-count-number text-5xl font-extrabold leading-none">${combinedRows.length}</span>
-      <button id="managementMapBtnInline" type="button" class="management-map-btn"${combinedRows.length === 0 ? ' disabled' : ''}>Mapa</button>
+      <button id="managementMapBtnInline" type="button" class="management-map-btn">Mapa</button>
       </span>
       <span class="management-count-label mt-1 block text-base">centres pendents d'actuació</span>
     </span>
   `;
   document.getElementById('managementMapBtnInline')?.addEventListener('click', () => {
-    managementMapController.open(state.pendingActionRowsByStage[state.educationStage] || []);
+    managementMapController.open(
+      state.pendingActionRowsByStage[state.educationStage] || [],
+      state.selectedSsttByStage[state.educationStage] || 'ALL',
+    );
   });
 
   if (!combinedRows.length) {
