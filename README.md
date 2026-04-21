@@ -7,6 +7,7 @@ Aplicació web estàtica amb Tailwind + Chart.js per resumir CSV de discrepànci
 - Targetes de resum amb indicadors principals.
 - Gràfics de seguiment d'e-Valisa i de trucades.
 - Taules de gestió per a Secundària i Primària.
+- Mapes de Gestió ST i Gestió SC amb centres geolocalitzats i capa del Servei Territorial.
 - Fitxa del centre carregada des de dades obertes de la Generalitat.
 
 ## Com executar
@@ -20,8 +21,30 @@ Aplicació web estàtica amb Tailwind + Chart.js per resumir CSV de discrepànci
 ## Estructura
 
 - `index.html`: estructura de la pàgina
+- `data/serveis-territorials-simplificat.geojson`: geometries simplificades dels 12 Serveis Territorials
 - `src/app.js`: lògica de càrrega, parseig i renderització
+- `src/management-map.js`: mapa emergent de Gestió ST
+- `src/sc-management.js`: vista i mapa de Gestió SC
 - `src/styles.css`: estils de la interfície
+
+## Mapes de Serveis Territorials
+
+L'aplicació fa servir `Leaflet` i `OpenStreetMap` per mostrar els centres sobre el mapa. A més dels marcadors dels centres, els mapes incorporen una capa de Serveis Territorials pintada en vermell semitransparent i sense etiquetes.
+
+- A `Gestió ST`, el botó `Mapa` obre un popup amb els centres pendents d'actuació. Si hi ha un ST concret seleccionat al filtre global, només es pinta aquell ST. Si el llistat no té cap centre, el popup s'obre igualment i mostra només el polígon del ST seleccionat.
+- A `Gestió SC`, el mapa mostra els centres filtrats i també pinta la capa territorial corresponent. Si les dades filtrades corresponen a un únic ST, només es pinta aquell ST; si no, es pinten tots els ST.
+
+La correspondència entre els codis abreujats del CSV (`APA`, `BLL`, `BNS`, `CCE`, `CEB`, `GIR`, `LLE`, `MVO`, `PEN`, `TAR`, `TEB`, `VOC`) i els codis oficials del GeoJSON es defineix dins dels controladors de mapa.
+
+## Dades dels Serveis Territorials
+
+El fitxer local `data/serveis-territorials-simplificat.geojson` és una versió simplificada de les geometries dels Serveis Territorials del Departament d'Educació. Conserva només els 12 registres territorials amb geometria i elimina els registres sense geometria com `No Consta` i `Altres/Diversos`, perquè l'aplicació només necessita pintar els àmbits territorials reals al mapa.
+
+Les dades originals provenen del dataset de Dades Obertes de Catalunya:
+
+https://analisi.transparenciacatalunya.cat/Educaci-/Delimitaci-dels-Serveis-Territorials-del-Departame/2xn2-t3s5
+
+La taula d'origen utilitzada per obtenir el GeoJSON complet és `ne55-4fc5`. Si cal regenerar el fitxer simplificat, s'ha de partir del GeoJSON complet oficial, mantenir els 12 Serveis Territorials amb geometria i descartar els registres sense geometria.
 
 ## Notes
 
