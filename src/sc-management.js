@@ -135,11 +135,12 @@ export function createScManagementController({
   function parseScRetiredEquipment(row) {
     if (!row) return null;
     const candidateFields = [
+      'PortatilsRetiratsTotal',
+      'portatilsretiratstotal',
+      'Portàtils retirats total',
+      'Portatils retirats total',
       'Equips retirats',
       'equips retirats',
-      'Equips a recollir',
-      'Equips a recollir a la visita (excedents mès averiats)',
-      'Equips a recollir a la visita (excedents més avariats)',
     ].map((field) => normalizeHeader(field));
 
     for (const field of candidateFields) {
@@ -157,7 +158,10 @@ export function createScManagementController({
 
     for (const [key, value] of Object.entries(row)) {
       const normalizedKey = normalizeHeader(key);
-      if (!normalizedKey.includes('equips') || !normalizedKey.includes('retirats')) continue;
+      const looksLikeRetired = normalizedKey.includes('retirats')
+        || normalizedKey.includes('retirats total');
+      const looksLikePendingCollection = normalizedKey.includes('recollir');
+      if (!looksLikeRetired || looksLikePendingCollection) continue;
       const normalizedValue = String(value ?? '').replace(',', '.').trim();
       if (!normalizedValue) continue;
       const parsed = Number(normalizedValue);
@@ -234,8 +238,8 @@ export function createScManagementController({
           city: city || '',
           retiredEquipment,
           excedents: parseNumericField(row, ['Excedent', 'Excedents']),
-          laptopsRetiredTotal: parseNumericField(row, ['equips retirats', 'Equips retirats', 'portatilsretiratstotal', 'PortatilsRetiratsTotal']),
-          toRetire: parseNumericField(row, ['Excedent', 'Excedents']) - parseNumericField(row, ['equips retirats', 'Equips retirats', 'portatilsretiratstotal', 'PortatilsRetiratsTotal']),
+          laptopsRetiredTotal: parseNumericField(row, ['PortatilsRetiratsTotal', 'portatilsretiratstotal', 'Portàtils retirats total', 'Portatils retirats total', 'equips retirats', 'Equips retirats']),
+          toRetire: parseNumericField(row, ['Excedent', 'Excedents']) - parseNumericField(row, ['PortatilsRetiratsTotal', 'portatilsretiratstotal', 'Portàtils retirats total', 'Portatils retirats total', 'equips retirats', 'Equips retirats']),
           evalisaNeeded: normalizeBoolean(row[neededField]) === true,
           evalisaReceived: normalizeBoolean(row[receivedField]) === true,
         };

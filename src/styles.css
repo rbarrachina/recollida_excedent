@@ -221,6 +221,25 @@
 .primary-management-table th:nth-child(11),
 .primary-management-table td:nth-child(11) { width: calc(37% / 3); }
 
+.error-detection-table {
+  width: 100%;
+  max-width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+
+.error-detection-table th,
+.error-detection-table td {
+  padding: 0.4rem 0.45rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  vertical-align: top;
+  font-size: 0.74rem;
+  line-height: 1.25;
+}
+
 .management-table thead th {
   background: #dbeafe;
   color: #111827;

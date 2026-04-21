@@ -23,6 +23,7 @@ const state = {
     PRIMARIA: '',
   },
   activeView: 'MANAGEMENT',
+  errorDetectionSubView: 'PENDING_0_4',
   managementRowsByKey: new Map(),
   pendingActionRowsByStage: {
     SECUNDARIA: [],
@@ -49,6 +50,9 @@ const selectedSsttDisplayEl = document.getElementById('selectedSsttDisplay');
 const viewManagementBtn = document.getElementById('viewManagementBtn');
 const viewChartsBtn = document.getElementById('viewChartsBtn');
 const viewScManagementBtn = document.getElementById('viewScManagementBtn');
+const viewErrorDetectionBtn = document.getElementById('viewErrorDetectionBtn');
+const errorDetectionPendingBtn = document.getElementById('errorDetectionPendingBtn');
+const errorDetectionAdvisorBtn = document.getElementById('errorDetectionAdvisorBtn');
 const fileTriggerEl = document.querySelector('label[for="fileInput"]');
 const summaryCardsEl = document.getElementById('summaryCards');
 const chartsGridSectionEl = document.getElementById('chartsGridSection');
@@ -57,6 +61,10 @@ const bySsttSectionEl = document.getElementById('bySsttSection');
 const neededReceivedSectionEl = document.getElementById('neededReceivedSection');
 const yesNoSectionEl = document.getElementById('yesNoSection');
 const scManagementSectionEl = document.getElementById('scManagementSection');
+const errorDetectionSectionEl = document.getElementById('errorDetectionSection');
+const errorDetectionSubtitleEl = document.getElementById('errorDetectionSubtitle');
+const errorDetectionCountEl = document.getElementById('errorDetectionCount');
+const errorDetectionTableEl = document.getElementById('errorDetectionTable');
 const scMapEl = document.getElementById('scMap');
 const scCentreCountEl = document.getElementById('scCentreCount');
 const scExcedentsTotalEl = document.getElementById('scExcedentsTotal');
@@ -711,13 +719,16 @@ function getFilteredRowsByGlobalSstt(rows) {
 }
 
 function applyActiveView() {
-  const showManagement = state.activeView === 'MANAGEMENT' || state.activeView === 'SC_MANAGEMENT';
+  const showManagement = state.activeView === 'MANAGEMENT' || state.activeView === 'SC_MANAGEMENT' || state.activeView === 'ERROR_DETECTION';
   const showCharts = state.activeView === 'GRAPHS';
   const showScManagement = state.activeView === 'SC_MANAGEMENT';
+  const showErrorDetection = state.activeView === 'ERROR_DETECTION';
   const showScButton = true;
+  const showErrorButton = true;
 
-  secondaryActionSectionEl?.classList.toggle('hidden', !showManagement || showScManagement);
+  secondaryActionSectionEl?.classList.toggle('hidden', !showManagement || showScManagement || showErrorDetection);
   scManagementSectionEl?.classList.toggle('hidden', !showScManagement);
+  errorDetectionSectionEl?.classList.toggle('hidden', !showErrorDetection);
   summaryCardsEl?.classList.toggle('hidden', !showCharts);
   chartsGridSectionEl?.classList.toggle('hidden', !showCharts);
   bySsttSectionEl?.classList.toggle('hidden', !showCharts);
@@ -728,9 +739,16 @@ function applyActiveView() {
   viewChartsBtn?.classList.toggle('active', showCharts);
   viewScManagementBtn?.classList.toggle('hidden', !showScButton);
   viewScManagementBtn?.classList.toggle('active', showScManagement);
+  viewErrorDetectionBtn?.classList.toggle('hidden', !showErrorButton);
+  viewErrorDetectionBtn?.classList.toggle('active', showErrorDetection);
+  errorDetectionPendingBtn?.classList.toggle('active', state.errorDetectionSubView === 'PENDING_0_4');
+  errorDetectionAdvisorBtn?.classList.toggle('active', state.errorDetectionSubView === 'ADVISOR_YES');
 
   if (showScManagement) {
     renderScManagementView();
+  }
+  if (showErrorDetection) {
+    renderErrorDetectionView();
   }
 }
 
@@ -814,6 +832,179 @@ function renderScManagementView() {
     neededField: stageConfig.summary.neededField,
     receivedField: stageConfig.summary.receivedField,
   });
+}
+
+function parseNumericField(row, candidateFields) {
+  if (!row) return 0;
+  const normalizedFields = candidateFields.map((field) => normalizeHeader(field));
+
+  for (const field of normalizedFields) {
+    const rawValue = row[field];
+    if (rawValue === null || rawValue === undefined || rawValue === '') continue;
+    const normalized = String(rawValue).replace(',', '.').trim();
+    const parsed = Number(normalized);
+    if (Number.isFinite(parsed)) return parsed;
+    const extractedNumber = normalized.match(/-?\d+(?:\.\d+)?/);
+    if (extractedNumber) {
+      const extractedParsed = Number(extractedNumber[0]);
+      if (Number.isFinite(extractedParsed)) return extractedParsed;
+    }
+  }
+
+  for (const [key, value] of Object.entries(row)) {
+    const normalizedKey = normalizeHeader(key);
+    const matchesCandidate = normalizedFields.some((field) => normalizedKey === field || normalizedKey.includes(field));
+    if (!matchesCandidate) continue;
+    const normalized = String(value ?? '').replace(',', '.').trim();
+    if (!normalized) continue;
+    const parsed = Number(normalized);
+    if (Number.isFinite(parsed)) return parsed;
+    const extractedNumber = normalized.match(/-?\d+(?:\.\d+)?/);
+    if (extractedNumber) {
+      const extractedParsed = Number(extractedNumber[0]);
+      if (Number.isFinite(extractedParsed)) return extractedParsed;
+    }
+  }
+
+  return 0;
+}
+
+function parseRetiredLaptopsTotal(row) {
+  return parseNumericField(row, [
+    'PortatilsRetiratsTotal',
+    'portatilsretiratstotal',
+    'Portàtils retirats total',
+    'Portatils retirats total',
+    'Equips retirats',
+    'equips retirats',
+  ]);
+}
+
+function getErrorDetectionRows(rows) {
+  const stageConfig = getActiveStageConfig();
+  const neededField = normalizeHeader(stageConfig.summary.neededField);
+  const ssttField = normalizeHeader('SSTT');
+  const requestedFields = ['e-Valisa sol·licitada', 'e-Valisa sol licitada', 'e-Valisa solicitada'];
+  const receivedFields = [stageConfig.summary.receivedField];
+  const receivedStatusFields = [stageConfig.summary.receivedStatusField || ''];
+  const assessorActionFields = ['Acció assessors', 'Accio assessors'];
+  const reasonFields = ['MOTIU discrepancia', 'Motiu discrepància', 'Motiu discrepancia'];
+  const notesFields = ['observacions', 'Observacions'];
+  const digitalAssessorNotesFields = ['Observacions Assesors Digitals'];
+
+  return rows
+    .map((row) => {
+      const excedents = parseNumericField(row, ['Excedent', 'Excedents']);
+      const retired = parseRetiredLaptopsTotal(row);
+      const remaining = excedents - retired;
+      const evalisaNeededBool = normalizeBoolean(row[neededField]);
+      const assessorActionBool = normalizeBoolean(getRowValue(row, assessorActionFields));
+
+      return {
+        code: getRowValue(row, ['Codi']).toString().trim(),
+        name: getRowValue(row, ['Nom']).toString().trim(),
+        sstt: String(row[ssttField] || '').trim(),
+        evalisaNeeded: getRowValue(row, [stageConfig.summary.neededField]),
+        evalisaRequested: getRowValue(row, requestedFields),
+        evalisaReceived: getRowValue(row, receivedFields),
+        evalisaStatus: getRowValue(row, receivedStatusFields),
+        assessorAction: getRowValue(row, assessorActionFields),
+        reason: getRowValue(row, reasonFields),
+        notes: getRowValue(row, notesFields),
+        digitalAssessorNotes: getRowValue(row, digitalAssessorNotesFields),
+        evalisaNeededBool,
+        assessorActionBool,
+        excedents,
+        retired,
+        remaining,
+      };
+    })
+    .filter((item) => item.code && item.name)
+    .sort((a, b) => {
+      return a.sstt.localeCompare(b.sstt, 'ca')
+        || a.code.localeCompare(b.code, 'ca', { numeric: true })
+        || a.name.localeCompare(b.name, 'ca');
+    });
+}
+
+function renderErrorDetectionView() {
+  if (!errorDetectionSectionEl || !errorDetectionTableEl) return;
+
+  const rows = state.rowsByStage[state.educationStage] || [];
+  const filteredRows = getFilteredRowsByGlobalSstt(rows);
+  const allDetectedRows = getErrorDetectionRows(filteredRows);
+  const selectedSstt = state.selectedSsttByStage[state.educationStage] || '';
+  const ssttLabel = !selectedSstt ? 'cap ST seleccionat' : (selectedSstt === 'ALL' ? 'tots els ST' : `ST ${selectedSstt}`);
+  const isPendingSubView = state.errorDetectionSubView === 'PENDING_0_4';
+  const showPrimaryCommentColumns = state.educationStage === 'PRIMARIA';
+  const detectedRows = isPendingSubView
+    ? allDetectedRows.filter((item) => item.evalisaNeededBool === true && item.remaining >= 0 && item.remaining <= 4)
+    : allDetectedRows.filter((item) => item.evalisaNeededBool === false && item.assessorActionBool === true);
+
+  if (errorDetectionSubtitleEl) {
+    errorDetectionSubtitleEl.textContent = isPendingSubView
+      ? `Centres de ${ssttLabel} amb e-Valisa necessària = SI i entre 0 i 4 equips pendents de retirar.`
+      : `Centres de ${ssttLabel} amb e-Valisa necessària = NO i Acció assessors = SI.`;
+  }
+
+  if (errorDetectionCountEl) {
+    errorDetectionCountEl.textContent = detectedRows.length
+      ? `${detectedRows.length} centres detectats`
+      : '0 centres detectats';
+  }
+
+  if (!detectedRows.length) {
+    errorDetectionTableEl.innerHTML = `
+      <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-6 text-center text-emerald-800">
+        <p class="mb-2 text-5xl leading-none">✓</p>
+        <p class="text-lg font-semibold">No s'han detectat centres amb aquest patró</p>
+      </div>
+    `;
+    return;
+  }
+
+  const body = detectedRows.map((item, index) => `
+    <tr class="${index % 2 === 0 ? 'management-row-even' : 'management-row-odd'}">
+      <td>${escapeHtml(item.code)}</td>
+      <td class="font-medium text-slate-800">${escapeHtml(item.name)}</td>
+      <td>${escapeHtml(item.sstt)}</td>
+      <td class="text-center">${escapeHtml(item.evalisaNeeded)}</td>
+      <td class="text-center">${escapeHtml(item.assessorAction)}</td>
+      <td class="text-center">${escapeHtml(item.evalisaRequested)}</td>
+      <td class="text-center">${escapeHtml(item.evalisaReceived)}</td>
+      <td class="text-center">${escapeHtml(item.evalisaStatus)}</td>
+      <td class="text-center">${item.excedents}</td>
+      <td class="text-center">${item.retired}</td>
+      <td class="text-center font-semibold text-amber-700">${item.remaining}</td>
+      <td>${escapeHtml(item.reason)}</td>
+      <td>${escapeHtml(item.notes)}</td>
+      ${showPrimaryCommentColumns ? `<td>${escapeHtml(item.digitalAssessorNotes)}</td>` : ''}
+    </tr>
+  `).join('');
+
+  errorDetectionTableEl.innerHTML = `
+    <table class="management-table error-detection-table text-left text-xs">
+      <thead>
+        <tr>
+          <th>Codi</th>
+          <th>Nom</th>
+          <th>SSTT</th>
+          <th class="text-center">e-Valisa necessària</th>
+          <th class="text-center">Acció assessors</th>
+          <th class="text-center">e-Valisa sol·licitada</th>
+          <th class="text-center">e-Valisa rebuda</th>
+          <th class="text-center">Estat e-Valisa</th>
+          <th class="text-center">Excedents</th>
+          <th class="text-center">Retirats</th>
+          <th class="text-center">Pendents</th>
+          <th>Motiu discrepància</th>
+          <th>Observacions</th>
+          ${showPrimaryCommentColumns ? '<th>Observacions Assesors Digitals</th>' : ''}
+        </tr>
+      </thead>
+      <tbody>${body}</tbody>
+    </table>
+  `;
 }
 
 function renderSummary(rows) {
@@ -1638,6 +1829,15 @@ globalSsttFilterEl?.addEventListener('change', (event) => {
 viewManagementBtn?.addEventListener('click', () => setActiveView('MANAGEMENT'));
 viewChartsBtn?.addEventListener('click', () => setActiveView('GRAPHS'));
 viewScManagementBtn?.addEventListener('click', () => setActiveView('SC_MANAGEMENT'));
+viewErrorDetectionBtn?.addEventListener('click', () => setActiveView('ERROR_DETECTION'));
+errorDetectionPendingBtn?.addEventListener('click', () => {
+  state.errorDetectionSubView = 'PENDING_0_4';
+  if (state.activeView === 'ERROR_DETECTION') applyActiveView();
+});
+errorDetectionAdvisorBtn?.addEventListener('click', () => {
+  state.errorDetectionSubView = 'ADVISOR_YES';
+  if (state.activeView === 'ERROR_DETECTION') applyActiveView();
+});
 
 secondaryActionTableEl?.addEventListener('click', (event) => {
   const centreSheetTarget = event.target.closest('[data-centre-sheet-key]');
