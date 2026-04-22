@@ -438,6 +438,36 @@ function getRowValue(row, candidateFields) {
   return '';
 }
 
+function parseNumericRowValue(row, candidateFields) {
+  const rawValue = getRowValue(row, candidateFields);
+  if (rawValue === '') return 0;
+
+  const normalizedValue = rawValue
+    .toString()
+    .trim()
+    .replace(/\./g, '')
+    .replace(',', '.');
+  const parsed = Number(normalizedValue);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function getPendingComputers(row) {
+  const plannedExcedent = parseNumericRowValue(row, [
+    'Excedent previst',
+    'Excedents previstos',
+    'Excedent',
+    'Excedents',
+  ]);
+  const retiredComputers = parseNumericRowValue(row, [
+    'Ordinadors retirats',
+    'Equips retirats',
+    'PortatilsRetiratsTotal',
+    'Portàtils retirats total',
+  ]);
+
+  return plannedExcedent - retiredComputers;
+}
+
 function getRowKey(row) {
   const id = getRowValue(row, ['IDPeticion']);
   const codi = getRowValue(row, ['Codi']);
@@ -1255,12 +1285,15 @@ function renderSecondaryActionView(rows) {
     managementSectionTitleEl.textContent = "Centres pendents d'actuació del Servei Territorial";
   }
   if (managementSectionSubtitleEl) {
-    managementSectionSubtitleEl.textContent = 'Centres amb "e-Valisa necessaria=SI" i "e-Valisa rebuda diferent de SI" més Centres amb "Estat e-Valisa=invàlida"';
+    managementSectionSubtitleEl.textContent = state.educationStage === 'SECUNDARIA'
+      ? 'Centres amb "e-Valisa necessaria=SI" i "e-Valisa rebuda diferent de SI"; només es mostren si tenen més de 5 ordinadors pendents (excedent previst menys ordinadors retirats).'
+      : 'Centres amb "e-Valisa necessaria=SI" i "e-Valisa rebuda diferent de SI" més Centres amb "Estat e-Valisa=invàlida"';
   }
 
   const filtered = rows
     .filter((row) => normalizeBoolean(row[neededField]) === true)
     .filter((row) => classifyReceivedStatus(getRowValue(row, receivedFields)) !== 'SI')
+    .filter((row) => state.educationStage !== 'SECUNDARIA' || getPendingComputers(row) > 5)
     .sort((a, b) => {
       const codiA = getRowValue(a, codiFields).toString();
       const codiB = getRowValue(b, codiFields).toString();
