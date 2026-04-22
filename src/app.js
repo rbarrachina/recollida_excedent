@@ -52,6 +52,7 @@ const viewChartsBtn = document.getElementById('viewChartsBtn');
 const viewScManagementBtn = document.getElementById('viewScManagementBtn');
 const viewErrorDetectionBtn = document.getElementById('viewErrorDetectionBtn');
 const errorDetectionPendingBtn = document.getElementById('errorDetectionPendingBtn');
+const errorDetectionPendingNoEvalisaBtn = document.getElementById('errorDetectionPendingNoEvalisaBtn');
 const errorDetectionAdvisorBtn = document.getElementById('errorDetectionAdvisorBtn');
 const fileTriggerEl = document.querySelector('label[for="fileInput"]');
 const summaryCardsEl = document.getElementById('summaryCards');
@@ -742,6 +743,7 @@ function applyActiveView() {
   viewErrorDetectionBtn?.classList.toggle('hidden', !showErrorButton);
   viewErrorDetectionBtn?.classList.toggle('active', showErrorDetection);
   errorDetectionPendingBtn?.classList.toggle('active', state.errorDetectionSubView === 'PENDING_0_4');
+  errorDetectionPendingNoEvalisaBtn?.classList.toggle('active', state.errorDetectionSubView === 'PENDING_5_NO_EVALISA');
   errorDetectionAdvisorBtn?.classList.toggle('active', state.errorDetectionSubView === 'ADVISOR_YES');
 
   if (showScManagement) {
@@ -880,6 +882,21 @@ function parseRetiredLaptopsTotal(row) {
   ]);
 }
 
+function isZerCentreName(value) {
+  return /\bZER\b/i.test(String(value || ''));
+}
+
+function isRedEsExcedentReason(value) {
+  const normalized = String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[’']/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return normalized === 'disposen de lexcedent pero tot es red.es';
+}
+
 function getErrorDetectionRows(rows) {
   const stageConfig = getActiveStageConfig();
   const neededField = normalizeHeader(stageConfig.summary.neededField);
@@ -936,15 +953,28 @@ function renderErrorDetectionView() {
   const selectedSstt = state.selectedSsttByStage[state.educationStage] || '';
   const ssttLabel = !selectedSstt ? 'cap ST seleccionat' : (selectedSstt === 'ALL' ? 'tots els ST' : `ST ${selectedSstt}`);
   const isPendingSubView = state.errorDetectionSubView === 'PENDING_0_4';
+  const isPendingNoEvalisaSubView = state.errorDetectionSubView === 'PENDING_5_NO_EVALISA';
   const showPrimaryCommentColumns = state.educationStage === 'PRIMARIA';
-  const detectedRows = isPendingSubView
-    ? allDetectedRows.filter((item) => item.evalisaNeededBool === true && item.remaining >= 0 && item.remaining <= 4)
-    : allDetectedRows.filter((item) => item.evalisaNeededBool === false && item.assessorActionBool === true);
+  let detectedRows = allDetectedRows.filter((item) => item.evalisaNeededBool === false && item.assessorActionBool === true);
+  if (isPendingSubView) {
+    detectedRows = allDetectedRows.filter((item) => item.evalisaNeededBool === true && item.remaining >= 0 && item.remaining <= 4);
+  } else if (isPendingNoEvalisaSubView) {
+    detectedRows = allDetectedRows.filter((item) => (
+      item.evalisaNeededBool === false
+      && item.remaining >= 5
+      && !isZerCentreName(item.name)
+      && !isRedEsExcedentReason(item.reason)
+    ));
+  }
 
   if (errorDetectionSubtitleEl) {
-    errorDetectionSubtitleEl.textContent = isPendingSubView
-      ? `Centres de ${ssttLabel} amb e-Valisa necessària = SI i entre 0 i 4 equips pendents de retirar.`
-      : `Centres de ${ssttLabel} amb e-Valisa necessària = NO i Acció assessors = SI.`;
+    let subtitle = `Centres de ${ssttLabel} amb e-Valisa necessària = NO i Acció assessors = SI.`;
+    if (isPendingSubView) {
+      subtitle = `Centres de ${ssttLabel} amb e-Valisa necessària = SI i entre 0 i 4 equips pendents de retirar.`;
+    } else if (isPendingNoEvalisaSubView) {
+      subtitle = `Centres de ${ssttLabel} amb e-Valisa necessària = NO i 5 o més equips pendents de retirar, excloent les ZER i els casos Red.es.`;
+    }
+    errorDetectionSubtitleEl.textContent = subtitle;
   }
 
   if (errorDetectionCountEl) {
@@ -1832,6 +1862,10 @@ viewScManagementBtn?.addEventListener('click', () => setActiveView('SC_MANAGEMEN
 viewErrorDetectionBtn?.addEventListener('click', () => setActiveView('ERROR_DETECTION'));
 errorDetectionPendingBtn?.addEventListener('click', () => {
   state.errorDetectionSubView = 'PENDING_0_4';
+  if (state.activeView === 'ERROR_DETECTION') applyActiveView();
+});
+errorDetectionPendingNoEvalisaBtn?.addEventListener('click', () => {
+  state.errorDetectionSubView = 'PENDING_5_NO_EVALISA';
   if (state.activeView === 'ERROR_DETECTION') applyActiveView();
 });
 errorDetectionAdvisorBtn?.addEventListener('click', () => {
