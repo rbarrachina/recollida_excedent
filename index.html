@@ -8,7 +8,7 @@
     <meta http-equiv="Expires" content="0" />
     <title>Resum de discrepàncies d'excedent PEDC</title>
     <script>
-      window.APP_ASSET_VERSION = '45';
+      window.APP_ASSET_VERSION = '60';
       document.write(`<link rel="stylesheet" href="./src/styles.css?v=${window.APP_ASSET_VERSION}" />`);
     </script>
     <link
@@ -123,6 +123,9 @@
               <button id="errorDetectionPendingBtn" class="action-btn active" type="button">Pendents 0-4</button>
               <button id="errorDetectionPendingNoEvalisaBtn" class="action-btn" type="button">Pendents 5+</button>
               <button id="errorDetectionAdvisorBtn" class="action-btn" type="button">Assessor = SI</button>
+              <button id="errorDetectionRuralBtn" class="action-btn" type="button">Rurals</button>
+              <button id="errorDetectionSentCheckBtn" class="action-btn" type="button">Comprova rebudes</button>
+              <input id="sentEvalisaInput" type="file" accept=".csv,text/csv" class="hidden" />
             </div>
           </div>
           <p id="errorDetectionCount" class="text-right text-sm text-slate-600"></p>
@@ -286,7 +289,10 @@
     </main>
 
     <script>
-      document.write(`<script type="module" src="./src/app.js?v=${window.APP_ASSET_VERSION}"><\/script>`);
+      document.write(`<script type="module">
+        const assetVersion = window.APP_ASSET_VERSION || Date.now();
+        import(\`./src/app.js?v=\${assetVersion}\`);
+      <\/script>`);
     </script>
   </body>
 </html>

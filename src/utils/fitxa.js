@@ -76,6 +76,54 @@ function fitxaToInt(value) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function normalizeFitxaLookupText(value) {
+  return getTextValue(value)
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[’']/g, ' ')
+    .replace(/[^A-Z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function compactFitxaLookupText(value) {
+  return normalizeFitxaLookupText(value).replace(/\s+/g, '');
+}
+
+function fitxaLevenshteinDistance(a, b) {
+  const left = compactFitxaLookupText(a);
+  const right = compactFitxaLookupText(b);
+  if (!left || !right) return Math.max(left.length, right.length);
+  const previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+  const current = Array.from({ length: right.length + 1 }, () => 0);
+
+  for (let i = 1; i <= left.length; i += 1) {
+    current[0] = i;
+    for (let j = 1; j <= right.length; j += 1) {
+      const cost = left[i - 1] === right[j - 1] ? 0 : 1;
+      current[j] = Math.min(
+        previous[j] + 1,
+        current[j - 1] + 1,
+        previous[j - 1] + cost,
+      );
+    }
+    for (let j = 0; j <= right.length; j += 1) previous[j] = current[j];
+  }
+
+  return previous[right.length];
+}
+
+function fitxaLookupTextsAreSimilar(a, b) {
+  const left = compactFitxaLookupText(a);
+  const right = compactFitxaLookupText(b);
+  if (!left || !right) return false;
+  if (left.includes(right) || right.includes(left)) return true;
+  const maxLength = Math.max(left.length, right.length);
+  const distance = fitxaLevenshteinDistance(left, right);
+  return maxLength <= 8 ? distance <= 1 : distance <= 2;
+}
+
 function prettifyFitxaKey(key) {
   if (FITXA_KEY_LABELS[key]) return FITXA_KEY_LABELS[key];
   return key
@@ -110,7 +158,9 @@ function rowToOrderedFitxaFields(row) {
 
 export function createFitxaService() {
   let fitxaCurrentCoursePromise = null;
+  let fitxaCentreCandidatesPromise = null;
   const fitxaCacheByCode = new Map();
+  const fitxaCandidatesByTown = new Map();
 
   async function getCurrentFitxaCourse() {
     if (fitxaCurrentCoursePromise) return fitxaCurrentCoursePromise;
@@ -145,6 +195,49 @@ export function createFitxaService() {
       throw new Error(message);
     }
     return Array.isArray(rows) ? rows : [];
+  }
+
+  async function fetchCurrentCentreCandidates() {
+    if (fitxaCentreCandidatesPromise) return fitxaCentreCandidatesPromise;
+    fitxaCentreCandidatesPromise = (async () => {
+      const currentCourse = await getCurrentFitxaCourse();
+      const fields = [
+        'codi_centre',
+        'denominaci_completa',
+        'nom_municipi',
+        'nom_localitat',
+        'einf1c',
+        'einf2c',
+        'epri',
+      ].join(', ');
+      const query = `SELECT ${fields} WHERE curs = '${fitxaEscapeSoql(currentCourse)}' LIMIT 50000`;
+      const response = await fetch(`${SOCRATA_RESOURCE_URL}?$query=${encodeURIComponent(query)}`);
+      const raw = await response.text();
+      let rows = null;
+      try {
+        rows = JSON.parse(raw);
+      } catch {
+        throw new Error("Resposta no vàlida de l'API.");
+      }
+      if (!response.ok) {
+        throw new Error(Array.isArray(rows) ? "Error consultant l'API de dades obertes." : (rows?.message || "Error consultant l'API de dades obertes."));
+      }
+      return Array.isArray(rows) ? rows : [];
+    })();
+    return fitxaCentreCandidatesPromise;
+  }
+
+  function mapFitxaCandidateRow(row) {
+    return {
+      code: normalizeCentreCode(getTextValue(row.codi_centre)),
+      name: getTextValue(row.denominaci_completa),
+      town: getTextValue(row.nom_municipi),
+      locality: getTextValue(row.nom_localitat),
+      hasPrimary: getTextValue(row.epri) === '1',
+      hasInfantil: getTextValue(row.einf1c) === '1' || getTextValue(row.einf2c) === '1',
+      sourceUrl: SOCRATA_SOURCE_URL,
+      raw: row,
+    };
   }
 
   function rowToFitxaData(code, row) {
@@ -198,7 +291,42 @@ export function createFitxaService() {
     return data;
   }
 
+  async function fetchCentreCandidatesByTown(town) {
+    const normalizedTown = getTextValue(town);
+    if (!normalizedTown) return [];
+    const townKey = normalizeFitxaLookupText(normalizedTown);
+    const cacheKey = townKey.toLowerCase();
+    if (fitxaCandidatesByTown.has(cacheKey)) return fitxaCandidatesByTown.get(cacheKey);
+    const rows = await fetchCurrentCentreCandidates();
+    let candidates = rows
+      .map(mapFitxaCandidateRow)
+      .filter((item) => item.code && item.name)
+      .filter((item) => normalizeFitxaLookupText(item.town) === townKey || normalizeFitxaLookupText(item.locality) === townKey);
+    if (!candidates.length && townKey.length >= 4) {
+      candidates = rows
+        .map(mapFitxaCandidateRow)
+        .filter((item) => item.code && item.name)
+        .filter((item) => {
+          const candidateTown = normalizeFitxaLookupText(item.town);
+          const candidateLocality = normalizeFitxaLookupText(item.locality);
+          return candidateTown.includes(townKey)
+            || townKey.includes(candidateTown)
+            || candidateLocality.includes(townKey)
+            || townKey.includes(candidateLocality);
+        });
+    }
+    if (!candidates.length && townKey.length >= 4) {
+      candidates = rows
+        .map(mapFitxaCandidateRow)
+        .filter((item) => item.code && item.name)
+        .filter((item) => fitxaLookupTextsAreSimilar(item.town, normalizedTown) || fitxaLookupTextsAreSimilar(item.locality, normalizedTown));
+    }
+    fitxaCandidatesByTown.set(cacheKey, candidates);
+    return candidates;
+  }
+
   return {
     fetchFitxaByCode,
+    fetchCentreCandidatesByTown,
   };
 }

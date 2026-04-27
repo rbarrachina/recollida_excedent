@@ -1,12 +1,20 @@
-import { createScManagementController } from './sc-management.js';
-import { createManagementMapController } from './management-map.js';
-import {
-  createFitxaService,
-  normalizeCentreCode,
-  normalizeFitxaWebUrl,
-  SOCRATA_SOURCE_URL,
-} from './utils/fitxa.js';
-import { normalizeUtmCoordinatePair, utmToLatLon } from './utils/geo.js';
+const ASSET_VERSION = new URL(import.meta.url).searchParams.get('v') || window.APP_ASSET_VERSION || Date.now();
+const [
+  { createScManagementController },
+  { createManagementMapController },
+  {
+    createFitxaService,
+    normalizeCentreCode,
+    normalizeFitxaWebUrl,
+    SOCRATA_SOURCE_URL,
+  },
+  { normalizeUtmCoordinatePair, utmToLatLon },
+] = await Promise.all([
+  import(`./sc-management.js?v=${ASSET_VERSION}`),
+  import(`./management-map.js?v=${ASSET_VERSION}`),
+  import(`./utils/fitxa.js?v=${ASSET_VERSION}`),
+  import(`./utils/geo.js?v=${ASSET_VERSION}`),
+]);
 
 const state = {
   educationStage: 'PRIMARIA',
@@ -29,6 +37,11 @@ const state = {
     SECUNDARIA: [],
     PRIMARIA: [],
   },
+  sentEvalisaCheckByStage: {
+    SECUNDARIA: { fileName: '', names: [] },
+    PRIMARIA: { fileName: '', names: [] },
+  },
+  ruralRenderRequestId: 0,
   charts: {
     receivedVsTotal: null,
     neededReceivedDonut: null,
@@ -54,6 +67,9 @@ const viewErrorDetectionBtn = document.getElementById('viewErrorDetectionBtn');
 const errorDetectionPendingBtn = document.getElementById('errorDetectionPendingBtn');
 const errorDetectionPendingNoEvalisaBtn = document.getElementById('errorDetectionPendingNoEvalisaBtn');
 const errorDetectionAdvisorBtn = document.getElementById('errorDetectionAdvisorBtn');
+const errorDetectionRuralBtn = document.getElementById('errorDetectionRuralBtn');
+const errorDetectionSentCheckBtn = document.getElementById('errorDetectionSentCheckBtn');
+const sentEvalisaInput = document.getElementById('sentEvalisaInput');
 const fileTriggerEl = document.querySelector('label[for="fileInput"]');
 const summaryCardsEl = document.getElementById('summaryCards');
 const chartsGridSectionEl = document.getElementById('chartsGridSection');
@@ -104,7 +120,7 @@ const closeStageMismatchBtn = document.getElementById('closeStageMismatchBtn');
 const stageMismatchTextEl = document.getElementById('stageMismatchText');
 const yesNoTableEl = document.getElementById('yesNoTable');
 const neededReceivedTableEl = document.getElementById('neededReceivedTable');
-const { fetchFitxaByCode } = createFitxaService();
+const { fetchFitxaByCode, fetchCentreCandidatesByTown } = createFitxaService();
 const scManagementController = createScManagementController({
   scManagementSectionEl,
   scMapEl,
@@ -203,6 +219,86 @@ const STAGE_CONFIG = {
 };
 
 const ALL_SSTT = ['APA', 'BLL', 'BNS', 'CCE', 'CEB', 'GIR', 'LLE', 'MVO', 'PEN', 'TAR', 'TEB', 'VOC'];
+const RURAL_SCHOOL_SOURCE_URL = 'https://xtec.gencat.cat/ca/curriculum/escolarural/sobre-les-escoles-rurals/websescoles/';
+const RURAL_TERRITORY_SSTT = {
+  'Alt Pirineu i Aran': ['APA'],
+  'Barcelona comarques': ['BLL', 'BNS'],
+  'Catalunya central': ['CCE'],
+  'Girona': ['GIR'],
+  'Lleida': ['LLE'],
+  'Maresme-Vallès Oriental': ['MVO'],
+  'Penedès': ['PEN'],
+  'Tarragona': ['TAR'],
+  "Terres de l'Ebre": ['TEB'],
+  'Vallès Occidental': ['VOC'],
+};
+const RURAL_SCHOOL_REFERENCES = [
+  { name: 'ESC Estudi Alejandro Casona', town: 'Les', territory: 'Alt Pirineu i Aran' },
+  { name: 'ESC Jaume I', town: 'Llívia', territory: 'Alt Pirineu i Aran' },
+  { name: 'ESC Ridolaina', town: 'Montellà i Martinet', territory: 'Alt Pirineu i Aran' },
+  { name: 'ESC Rosa Campà', town: 'Montferrer i Castellbó', territory: 'Alt Pirineu i Aran' },
+  { name: 'ESC Sant Ròc', town: 'Bossòst', territory: 'Alt Pirineu i Aran' },
+  { name: 'ESC El Roure', town: 'Pontons', territory: 'Barcelona comarques' },
+  { name: 'ESC La Cabana', town: 'Les Cabanyes', territory: 'Barcelona comarques' },
+  { name: 'ESC Ràfols', town: 'Torrelavit', territory: 'Barcelona comarques' },
+  { name: "ESC L'Agullola", town: 'Rupit i Pruit', territory: 'Catalunya central' },
+  { name: 'ESC Comtes de Lacambra', town: 'Les Masies de Voltregà', territory: 'Catalunya central' },
+  { name: 'ESC La Monjoia', town: 'Sant Bartomeu del Grau', territory: 'Catalunya central' },
+  { name: 'ESC Lillet A. Güell', town: 'La Pobla de Lillet', territory: 'Catalunya central' },
+  { name: 'ESC Lluçanès', town: 'Prats de Lluçanès', territory: 'Catalunya central' },
+  { name: 'ESC Muntanyola', town: 'Muntanyola', territory: 'Catalunya central' },
+  { name: 'ESC Princesa Làscaris', town: 'Casserres', territory: 'Catalunya central' },
+  { name: 'ESC Sant Marc', town: 'Gironella', territory: 'Catalunya central' },
+  { name: 'ESC Sant Llorenç', town: 'Guardiola de Berguedà', territory: 'Catalunya central' },
+  { name: 'ESC Sant Salvador', town: 'Cercs', territory: 'Catalunya central' },
+  { name: "ESC Sesmón d'Oló", town: "Santa Maria d'Oló", territory: 'Catalunya central' },
+  { name: 'ESC Terra Nostra', town: 'Olost', territory: 'Catalunya central' },
+  { name: 'ESC de la Valldan', town: 'Berga', territory: 'Catalunya central' },
+  { name: 'ESC Valldeneu', town: 'Sant Martí de Centelles', territory: 'Catalunya central' },
+  { name: 'ESC de Vilanova de Sau', town: 'Vilanova de Sau', territory: 'Catalunya central' },
+  { name: 'ESC Vall de Lord', town: 'Sant Llorenç de Morunys', territory: 'Catalunya central' },
+  { name: 'ESC Alguema', town: "Santa Llogaia d'Alguema", territory: 'Girona' },
+  { name: 'ESC de Cabanes', town: 'Cabanes', territory: 'Girona' },
+  { name: 'ESC Carles de Fortuny', town: 'Esponellà', territory: 'Girona' },
+  { name: "ESC del Far d'Empordà", town: "El Far d'Empordà", territory: 'Girona' },
+  { name: 'ESC Finestres', town: 'Mieres', territory: 'Girona' },
+  { name: 'ESC Fluvianets', town: "L'Armentera", territory: 'Girona' },
+  { name: 'ESC Joan Maragall', town: 'Santa Pau', territory: 'Girona' },
+  { name: 'ESC La Vall', town: 'Osor', territory: 'Girona' },
+  { name: 'ESC de Lliurona', town: 'Beuda', territory: 'Girona' },
+  { name: 'ESC Lluís Castells', town: 'Riudaura', territory: 'Girona' },
+  { name: 'ESC Maria Pagès i Trayter', town: 'Ordis', territory: 'Girona' },
+  { name: 'ESC Montserrat Vayreda i Trullol', town: 'Lladó', territory: 'Girona' },
+  { name: "ESC l'Olivar Vell", town: 'Begur', territory: 'Girona' },
+  { name: 'ESC Pau', town: 'Pau', territory: 'Girona' },
+  { name: 'ESC Sant Andreu de Borrassà', town: 'Borrassà', territory: 'Girona' },
+  { name: 'ESC de Sant Esteve de Guialbes', town: 'Vilademuls', territory: 'Girona' },
+  { name: 'ESC Sant Jaume', town: 'Portbou', territory: 'Girona' },
+  { name: 'ESC Sant Jordi', town: 'Sant Jordi Desvalls', territory: 'Girona' },
+  { name: 'ESC Teresa de Pallejà', town: 'Fortià', territory: 'Girona' },
+  { name: "ESC Torre d'en Reig", town: 'Vilabertran', territory: 'Girona' },
+  { name: 'ESC Vallgarriga', town: 'Sant Miquel de Fluvià', territory: 'Girona' },
+  { name: 'ESC Vilademany', town: 'Aiguaviva', territory: 'Girona' },
+  { name: 'ESC Marinada', town: 'Vilanova de Bellpuig', territory: 'Lleida' },
+  { name: "ESC Minyons d'Urgell", town: 'Fondarella', territory: 'Lleida' },
+  { name: 'ESC Francesc Macià', town: 'Òrrius', territory: 'Maresme-Vallès Oriental' },
+  { name: "ESC d'Hortasavinyà", town: 'Tordera', territory: 'Maresme-Vallès Oriental' },
+  { name: 'ESC Montmany', town: 'Figaró-Montmany', territory: 'Maresme-Vallès Oriental' },
+  { name: 'ESC Santa Agnès de Malanyanes', town: 'La Roca del Vallès', territory: 'Maresme-Vallès Oriental' },
+  { name: 'ESC Josep Nin', town: 'Salomó', territory: 'Tarragona' },
+  { name: 'ESC La Plana', town: 'Vila-seca', territory: 'Tarragona' },
+  { name: 'ESC de La Riba', town: 'La Riba', territory: 'Tarragona' },
+  { name: 'ESC Les Moreres', town: 'Aiguamúrcia', territory: 'Tarragona' },
+  { name: 'ESC de Maspujols', town: 'Maspujols', territory: 'Tarragona' },
+  { name: 'ESC Santa Marina', town: 'Pratdip', territory: 'Tarragona' },
+  { name: 'ESC Sant Miquel', town: 'Aiguamúrcia', territory: 'Tarragona' },
+  { name: 'ESC Teresa Godes i Domènech', town: 'El Montmell', territory: 'Tarragona' },
+  { name: 'ESC Valdelors', town: "Vandellòs i l'Hospitalet de l'Infant", territory: 'Tarragona' },
+  { name: 'ESC Marcel·lí Domingo', town: 'Tivissa', territory: "Terres de l'Ebre" },
+  { name: 'ESC Montsagre', town: 'Horta de Sant Joan', territory: "Terres de l'Ebre" },
+  { name: 'ESC de Xerta', town: 'Xerta', territory: "Terres de l'Ebre" },
+  { name: 'ESC Rellinars', town: 'Rellinars', territory: 'Vallès Occidental' },
+];
 
 function normalizeHeader(value) {
   return value
@@ -240,6 +336,54 @@ function normalizeCategoryText(value) {
     .replace(/[^A-Z0-9]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function normalizeSchoolNameForMatch(value) {
+  return normalizeCategoryText(value)
+    .replace(/\b(ESC|ESCOLA|CEIP|COL LEGI|COLLEGI)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function buildSchoolNameKeys(value) {
+  const base = normalizeSchoolNameForMatch(value);
+  const withoutLeadingArticle = base.replace(/^(DE LA|DE L|DEL|DE|D|LA|L|EL|ELS|LES)\s+/, '').trim();
+  return new Set([base, withoutLeadingArticle].filter(Boolean));
+}
+
+function normalizeCodeForMatch(value) {
+  const digits = String(value || '').replace(/\D+/g, '');
+  return digits.replace(/^0+/, '') || digits;
+}
+
+function getSchoolNameTokens(value) {
+  return normalizeSchoolNameForMatch(value)
+    .split(' ')
+    .filter((token) => token.length >= 3 && !['DEL', 'DE', 'LA', 'EL', 'LES', 'ELS', 'SANT', 'SANTA'].includes(token));
+}
+
+function schoolNamesAreSimilar(...names) {
+  const tokenSets = names
+    .filter(Boolean)
+    .map((name) => new Set(getSchoolNameTokens(name)));
+  if (tokenSets.length < 2 || tokenSets.some((tokens) => !tokens.size)) return false;
+  const [first, ...rest] = tokenSets;
+  return rest.every((tokens) => [...first].some((token) => tokens.has(token)));
+}
+
+function getRuralReferenceSstt(reference) {
+  return RURAL_TERRITORY_SSTT[reference.territory] || [];
+}
+
+function ruralReferenceMatchesSstt(reference, sstt) {
+  const referenceSstt = getRuralReferenceSstt(reference);
+  if (!referenceSstt.length || !sstt) return false;
+  return referenceSstt.includes(String(sstt).trim());
+}
+
+function filterRuralReferencesByXtecSstt(selectedSstt) {
+  if (!selectedSstt || selectedSstt === 'ALL') return RURAL_SCHOOL_REFERENCES;
+  return RURAL_SCHOOL_REFERENCES.filter((reference) => getRuralReferenceSstt(reference).includes(selectedSstt));
 }
 
 function escapeHtml(value) {
@@ -564,8 +708,8 @@ async function readCsvWithEncodingFallback(file) {
     const text = new TextDecoder(encoding).decode(buffer);
     const rows = parseCsv(text);
     const replacementCount = (text.match(/\uFFFD/g) || []).length;
-    const mojibakeCount = (text.match(/Ã|Â|ï»¿/g) || []).length;
-    const score = rows.length * 1000 - replacementCount - mojibakeCount;
+    const mojibakeCount = (text.match(/Ã.|Â.|â.|ð.|ï»¿/g) || []).length;
+    const score = rows.length * 1000 - (replacementCount * 100) - (mojibakeCount * 500);
 
     if (score > bestScore) {
       bestText = text;
@@ -576,6 +720,49 @@ async function readCsvWithEncodingFallback(file) {
   }
 
   return { text: bestText, rows: bestRows, encoding: bestEncoding };
+}
+
+function parseFirstColumnCsv(text) {
+  const lines = text
+    .replace(/^\uFEFF/, '')
+    .split(/\r?\n/)
+    .filter((line) => line.trim().length > 0);
+  if (!lines.length) return [];
+
+  const countDelimiter = (line, delimiter) => splitCsvLine(line, delimiter).length;
+  const delimiter = countDelimiter(lines[0], ';') >= countDelimiter(lines[0], ',') ? ';' : ',';
+  const values = lines
+    .map((line) => (splitCsvLine(line, delimiter)[0] || '').trim())
+    .filter(Boolean);
+
+  const [first, ...rest] = values;
+  if (first && /^(nom|centre|nom centre|nom del centre|escola)$/i.test(normalizeHeader(first))) {
+    return rest;
+  }
+  return values;
+}
+
+async function readFirstColumnCsvWithEncodingFallback(file) {
+  const buffer = await file.arrayBuffer();
+  const encodings = ['utf-8', 'windows-1252', 'iso-8859-1'];
+  let bestNames = [];
+  let bestEncoding = encodings[0];
+  let bestScore = -1;
+
+  for (const encoding of encodings) {
+    const text = new TextDecoder(encoding).decode(buffer);
+    const names = parseFirstColumnCsv(text);
+    const replacementCount = (text.match(/\uFFFD/g) || []).length;
+    const mojibakeCount = (text.match(/Ã.|Â.|â.|ð.|ï»¿/g) || []).length;
+    const score = names.length * 1000 - (replacementCount * 100) - (mojibakeCount * 500);
+    if (score > bestScore) {
+      bestNames = names;
+      bestEncoding = encoding;
+      bestScore = score;
+    }
+  }
+
+  return { names: bestNames, encoding: bestEncoding };
 }
 
 function normalizeNameForDetection(value) {
@@ -745,6 +932,8 @@ function applyActiveView() {
   errorDetectionPendingBtn?.classList.toggle('active', state.errorDetectionSubView === 'PENDING_0_4');
   errorDetectionPendingNoEvalisaBtn?.classList.toggle('active', state.errorDetectionSubView === 'PENDING_5_NO_EVALISA');
   errorDetectionAdvisorBtn?.classList.toggle('active', state.errorDetectionSubView === 'ADVISOR_YES');
+  errorDetectionRuralBtn?.classList.toggle('active', state.errorDetectionSubView === 'RURAL_ZER');
+  errorDetectionSentCheckBtn?.classList.toggle('active', state.errorDetectionSubView === 'SENT_EVALISA_CHECK');
 
   if (showScManagement) {
     renderScManagementView();
@@ -886,6 +1075,20 @@ function isZerCentreName(value) {
   return /\bZER\b/i.test(String(value || ''));
 }
 
+function isRuralSchoolText(value) {
+  const normalized = normalizeCategoryText(value);
+  return /\b(ESCOLA RURAL|RURAL|ZER)\b/.test(normalized);
+}
+
+function isRuralSchoolErrorDetectionItem(item) {
+  return [
+    item.name,
+    item.reason,
+    item.notes,
+    item.digitalAssessorNotes,
+  ].some(isRuralSchoolText);
+}
+
 function isRedEsExcedentReason(value) {
   const normalized = String(value || '')
     .toLowerCase()
@@ -944,6 +1147,501 @@ function getErrorDetectionRows(rows) {
     });
 }
 
+function selectOpenDataRuralCandidate(reference, candidates) {
+  const resultCount = candidates.length;
+  if (!candidates.length) {
+    return {
+      candidate: null,
+      status: 'població no trobada a Dades Obertes',
+      resultCount,
+      alert: `No s'ha trobat cap centre a Dades Obertes per la població ${reference.town}.`,
+    };
+  }
+
+  if (candidates.length === 1) {
+    return {
+      candidate: candidates[0],
+      status: 'Dades Obertes per població única',
+      resultCount,
+      alert: '',
+    };
+  }
+
+  const referenceKeys = buildSchoolNameKeys(reference.name);
+  let matches = candidates.filter((candidate) => {
+    const candidateKeys = buildSchoolNameKeys(candidate.name);
+    return [...referenceKeys].some((key) => candidateKeys.has(key));
+  });
+  let status = 'Dades Obertes per població i nom';
+
+  if (!matches.length) {
+    matches = candidates.filter((candidate) => {
+      const candidateKeys = buildSchoolNameKeys(candidate.name);
+      return [...referenceKeys].some((referenceKey) => {
+        if (referenceKey.length < 5) return false;
+        return [...candidateKeys].some((candidateKey) => (
+          candidateKey.length >= 5
+          && (candidateKey.includes(referenceKey) || referenceKey.includes(candidateKey))
+        ));
+      });
+    });
+    status = matches.length ? 'Dades Obertes per població i nom aproximat' : 'Dades Obertes per població';
+  }
+
+  if (matches.length === 1) {
+    return {
+      candidate: matches[0],
+      status,
+      resultCount,
+      alert: `La cerca per població a fitxa-centres-educatius retorna ${resultCount} resultats; s'ha triat ${matches[0].code} pel nom del centre.`,
+    };
+  }
+
+  const primaryCandidates = candidates.filter((candidate) => candidate.hasPrimary || candidate.hasInfantil);
+  if (primaryCandidates.length === 1) {
+    return {
+      candidate: primaryCandidates[0],
+      status: 'Dades Obertes per població i etapa',
+      resultCount,
+      alert: `La cerca per població a fitxa-centres-educatius retorna ${resultCount} resultats; s'ha triat ${primaryCandidates[0].code} perquè és l'únic d'infantil/primària.`,
+    };
+  }
+
+  if (primaryCandidates.length > 1) {
+    return {
+      candidate: null,
+      status: 'múltiples resultats a fitxa-centres',
+      resultCount,
+      alert: `La cerca per població a fitxa-centres-educatius retorna ${resultCount} resultats i ${primaryCandidates.length} són d'infantil/primària: ${primaryCandidates.map((match) => `${match.code} ${match.name}`).join(' | ')}`,
+    };
+  }
+
+  return {
+    candidate: null,
+    status: 'múltiples resultats a fitxa-centres',
+    resultCount,
+    alert: `La cerca per població a fitxa-centres-educatius retorna ${resultCount} resultats i no està clar quin codi correspon a ${reference.name}: ${candidates.map((match) => `${match.code} ${match.name}`).join(' | ')}`,
+  };
+}
+
+function findCsvRuralMatchByCode(candidate, csvByCode) {
+  if (!candidate) return null;
+  return csvByCode.get(normalizeCentreCode(candidate.code))
+    || csvByCode.get(normalizeCodeForMatch(candidate.code))
+    || null;
+}
+
+function getEvalisaBucket(value) {
+  const normalized = normalizeBoolean(value);
+  if (normalized === false) return 'NO';
+  if (normalized === true) return 'SI';
+  return 'ALTRES';
+}
+
+function buildOriginalRowsByCentreName(rows) {
+  const ssttField = normalizeHeader('SSTT');
+  const stageConfig = getActiveStageConfig();
+  const receivedFields = [stageConfig.summary.receivedField];
+  const receivedStatusFields = [stageConfig.summary.receivedStatusField || ''];
+  const neededFields = [stageConfig.summary.neededField];
+  const byName = new Map();
+
+  rows.forEach((row) => {
+    const name = getRowValue(row, ['Nom']).toString().trim();
+    if (!name) return;
+    const key = normalizeSchoolNameForMatch(name);
+    if (!key) return;
+    if (!byName.has(key)) byName.set(key, []);
+    byName.get(key).push({
+      code: getRowValue(row, ['Codi']).toString().trim(),
+      name,
+      sstt: String(row[ssttField] || '').trim(),
+      evalisaNeeded: getRowValue(row, neededFields),
+      evalisaReceived: getRowValue(row, receivedFields),
+      evalisaStatus: getRowValue(row, receivedStatusFields),
+    });
+  });
+
+  return byName;
+}
+
+function findOriginalRowsByUploadedName(uploadedName, rowsByName) {
+  const key = normalizeSchoolNameForMatch(uploadedName);
+  if (!key) return [];
+  const exact = rowsByName.get(key);
+  if (exact?.length) return exact;
+
+  const matches = [];
+  rowsByName.forEach((rows, rowKey) => {
+    if (key.length >= 5 && rowKey.length >= 5 && (rowKey.includes(key) || key.includes(rowKey))) {
+      matches.push(...rows);
+    }
+  });
+  return matches;
+}
+
+function getSentEvalisaCheckRows(originalRows, uploadedNames) {
+  const rowsByName = buildOriginalRowsByCentreName(originalRows);
+  return uploadedNames.map((uploadedName) => {
+    const matches = findOriginalRowsByUploadedName(uploadedName, rowsByName);
+    if (matches.length === 1) {
+      const match = matches[0];
+      const receivedBool = normalizeBoolean(match.evalisaReceived);
+      return {
+        uploadedName,
+        ...match,
+        receivedBool,
+        status: receivedBool === true ? 'rebuda al CSV original' : 'no consta com rebuda',
+        error: '',
+      };
+    }
+    if (!matches.length) {
+      return {
+        uploadedName,
+        code: '',
+        name: '',
+        sstt: '',
+        evalisaNeeded: '',
+        evalisaReceived: '',
+        evalisaStatus: '',
+        receivedBool: null,
+        status: 'no trobat',
+        error: "No s'ha trobat cap centre al CSV original amb aquest nom.",
+      };
+    }
+    return {
+      uploadedName,
+      code: '',
+      name: matches.map((match) => `${match.code} ${match.name}`).join(' | '),
+      sstt: [...new Set(matches.map((match) => match.sstt).filter(Boolean))].join(' | '),
+      evalisaNeeded: '',
+      evalisaReceived: '',
+      evalisaStatus: '',
+      receivedBool: null,
+      status: 'dubte',
+      error: `Hi ha més d'una coincidència possible: ${matches.map((match) => `${match.code} ${match.name}`).join(' | ')}`,
+    };
+  });
+}
+
+function getOriginalReceivedRowsMissingFromUploaded(originalRows, uploadedNames) {
+  const uploadedKeys = new Set(uploadedNames.map((name) => normalizeSchoolNameForMatch(name)).filter(Boolean));
+  const stageConfig = getActiveStageConfig();
+  const ssttField = normalizeHeader('SSTT');
+  const receivedFields = [stageConfig.summary.receivedField];
+  const receivedStatusFields = [stageConfig.summary.receivedStatusField || ''];
+  const neededFields = [stageConfig.summary.neededField];
+
+  return originalRows
+    .map((row) => {
+      const name = getRowValue(row, ['Nom']).toString().trim();
+      return {
+        uploadedName: '',
+        code: getRowValue(row, ['Codi']).toString().trim(),
+        name,
+        sstt: String(row[ssttField] || '').trim(),
+        evalisaNeeded: getRowValue(row, neededFields),
+        evalisaReceived: getRowValue(row, receivedFields),
+        evalisaStatus: getRowValue(row, receivedStatusFields),
+        nameKey: normalizeSchoolNameForMatch(name),
+        status: 'rebuda al CSV original però absent al fitxer carregat',
+        error: '',
+      };
+    })
+    .filter((item) => item.nameKey && normalizeBoolean(item.evalisaReceived) === true)
+    .filter((item) => !uploadedKeys.has(item.nameKey))
+    .sort((a, b) => a.sstt.localeCompare(b.sstt, 'ca') || a.name.localeCompare(b.name, 'ca'));
+}
+
+function renderSentEvalisaCheckView(rows, ssttLabel) {
+  const uploaded = state.sentEvalisaCheckByStage[state.educationStage] || { fileName: '', names: [] };
+  if (errorDetectionSubtitleEl) {
+    errorDetectionSubtitleEl.textContent = `Compara centres declarats amb e-Valisa enviada contra el CSV original de ${ssttLabel}.`;
+  }
+  if (errorDetectionCountEl) {
+    errorDetectionCountEl.textContent = uploaded.names.length
+      ? `${uploaded.names.length} centres al fitxer de comprovació`
+      : 'Cap fitxer de comprovació carregat';
+  }
+
+  const controls = `
+    <div class="sent-check-controls">
+      <button id="sentEvalisaUploadBtn" class="file-trigger" type="button">Carrega CSV de rebudes</button>
+      <span>${uploaded.fileName ? `Fitxer: ${escapeHtml(uploaded.fileName)}` : 'Cap fitxer carregat'}</span>
+    </div>
+  `;
+
+  if (!uploaded.names.length) {
+    errorDetectionTableEl.innerHTML = `
+      ${controls}
+      <div class="rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-slate-700">
+        <p class="text-lg font-semibold">Carrega el CSV amb els centres que han enviat e-Valisa.</p>
+        <p class="mt-1 text-sm">Només es farà servir la primera columna del fitxer.</p>
+      </div>
+    `;
+    document.getElementById('sentEvalisaUploadBtn')?.addEventListener('click', () => sentEvalisaInput?.click());
+    return;
+  }
+
+  const checkRows = getSentEvalisaCheckRows(rows, uploaded.names);
+  const receivedRows = checkRows.filter((item) => item.receivedBool === true);
+  const notReceivedRows = checkRows.filter((item) => item.receivedBool !== true && !item.error);
+  const errorRows = checkRows.filter((item) => item.error);
+  const missingFromUploadedRows = getOriginalReceivedRowsMissingFromUploaded(rows, uploaded.names);
+
+  const renderRows = (items) => items.map((item, index) => `
+    <tr class="${index % 2 === 0 ? 'management-row-even' : 'management-row-odd'} ${item.error ? 'rural-row-alert' : ''}">
+      <td>${escapeHtml(item.uploadedName)}</td>
+      <td>${escapeHtml(item.code || '-')}</td>
+      <td class="font-medium text-slate-800">${escapeHtml(item.name || '-')}</td>
+      <td>${escapeHtml(item.sstt || '-')}</td>
+      <td class="text-center">${escapeHtml(item.evalisaNeeded || '-')}</td>
+      <td class="text-center">${escapeHtml(item.evalisaReceived || '-')}</td>
+      <td class="text-center">${escapeHtml(item.evalisaStatus || '-')}</td>
+      <td>${escapeHtml(item.status || '-')}</td>
+      <td>${escapeHtml(item.error || '')}</td>
+    </tr>
+  `).join('');
+
+  const renderTable = (title, items, emptyText) => `
+    <section class="rural-result-section">
+      <h3 class="rural-result-title">${escapeHtml(title)} <span>${items.length}</span></h3>
+      ${items.length ? `
+        <table class="management-table rural-detection-table text-left text-xs">
+          <thead>
+            <tr>
+              <th>Nom al CSV carregat</th>
+              <th>Codi</th>
+              <th>Nom al CSV original</th>
+              <th>SSTT</th>
+              <th class="text-center">e-Valisa necessària</th>
+              <th class="text-center">e-Valisa rebuda</th>
+              <th class="text-center">Estat e-Valisa</th>
+              <th>Resultat</th>
+              <th>Error</th>
+            </tr>
+          </thead>
+          <tbody>${renderRows(items)}</tbody>
+        </table>
+      ` : `<div class="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">${escapeHtml(emptyText)}</div>`}
+    </section>
+  `;
+
+  errorDetectionTableEl.innerHTML = `
+    ${controls}
+    <div class="rural-summary mb-3">
+      <span>${receivedRows.length} e-Valisa rebuda = SI</span>
+      <span>${notReceivedRows.length} no consten com rebudes</span>
+      <span>${missingFromUploadedRows.length} rebudes absents al fitxer carregat</span>
+      <span>${errorRows.length} errors o dubtes</span>
+    </div>
+    ${renderTable('e-Valisa rebuda = SI al CSV original', receivedRows, 'Cap centre comprovat consta amb e-Valisa rebuda = SI.')}
+    ${renderTable('No consta e-Valisa rebuda al CSV original', notReceivedRows, 'No hi ha discrepàncies: tots consten com rebuts o tenen error de coincidència.')}
+    ${renderTable('e-Valisa rebuda = SI però no és al fitxer carregat', missingFromUploadedRows, 'No hi ha centres amb e-Valisa rebuda = SI absents al fitxer carregat.')}
+    ${renderTable('Errors o dubtes', errorRows, 'No hi ha errors ni dubtes de coincidència.')}
+  `;
+  document.getElementById('sentEvalisaUploadBtn')?.addEventListener('click', () => sentEvalisaInput?.click());
+}
+
+async function getRuralDetectionRows(rows, selectedSstt) {
+  const stageConfig = getActiveStageConfig();
+  const ssttField = normalizeHeader('SSTT');
+  const ruralReferences = filterRuralReferencesByXtecSstt(selectedSstt);
+  const csvItems = rows
+    .map((row) => {
+      const name = getRowValue(row, ['Nom']).toString().trim();
+      return {
+        code: getRowValue(row, ['Codi']).toString().trim(),
+        name,
+        sstt: String(row[ssttField] || '').trim(),
+        evalisaNeeded: getRowValue(row, [stageConfig.summary.neededField]),
+        row,
+        keys: buildSchoolNameKeys(name),
+        isZer: isZerCentreName(name),
+      };
+    })
+    .filter((item) => item.name);
+  const csvByCode = new Map();
+  csvItems.forEach((item) => {
+    csvByCode.set(normalizeCentreCode(item.code), item);
+    csvByCode.set(normalizeCodeForMatch(item.code), item);
+  });
+
+  const ruralRows = await Promise.all(ruralReferences.map(async (reference) => {
+    const referenceSstt = getRuralReferenceSstt(reference);
+    try {
+      const openDataCandidates = await fetchCentreCandidatesByTown(reference.town);
+      const { candidate, status, alert, resultCount } = selectOpenDataRuralCandidate(reference, openDataCandidates);
+      const csvMatch = findCsvRuralMatchByCode(candidate, csvByCode);
+      const stMatches = csvMatch ? ruralReferenceMatchesSstt(reference, csvMatch.sstt) : true;
+      const alerts = [];
+      if (alert) alerts.push(alert);
+      if (candidate && !csvMatch) alerts.push(`El codi ${candidate.code} existeix a Dades Obertes però no surt al fitxer d'entrada.`);
+      if (csvMatch && !stMatches) alerts.push(`El ST del CSV (${csvMatch.sstt || '-'}) no coincideix amb el ST XTEC (${referenceSstt.join(', ') || '-'})`);
+      return {
+        sourceName: reference.name,
+        sourceTown: reference.town,
+        sourceTerritory: reference.territory,
+        sourceSstt: referenceSstt.join(', '),
+        code: candidate?.code || '',
+        name: csvMatch?.name || '',
+        openDataName: candidate?.name || '',
+        openDataTown: candidate?.town || candidate?.locality || '',
+        openDataResultCount: resultCount,
+        sstt: csvMatch?.sstt || '',
+        evalisaNeeded: csvMatch?.evalisaNeeded || '',
+        inCsv: Boolean(csvMatch),
+        status: csvMatch ? status : `${status}; no al CSV`,
+        alert: alerts.length ? `No està clar quina escola és: ${alerts.join('; ')}` : '',
+      };
+    } catch (error) {
+      return {
+        sourceName: reference.name,
+        sourceTown: reference.town,
+        sourceTerritory: reference.territory,
+        sourceSstt: referenceSstt.join(', '),
+        code: '',
+        name: '',
+        openDataName: '',
+        openDataTown: '',
+        openDataResultCount: 0,
+        sstt: '',
+        evalisaNeeded: '',
+        inCsv: false,
+        status: 'error Dades Obertes',
+        alert: `No s'ha pogut consultar Dades Obertes: ${error.message}`,
+      };
+    }
+  }));
+
+  return ruralRows.sort((a, b) => {
+    return a.sourceTerritory.localeCompare(b.sourceTerritory, 'ca')
+      || a.sourceName.localeCompare(b.sourceName, 'ca')
+      || a.name.localeCompare(b.name, 'ca');
+  });
+}
+
+async function renderRuralDetectionView(rows, selectedSstt, ssttLabel) {
+  const requestId = state.ruralRenderRequestId + 1;
+  state.ruralRenderRequestId = requestId;
+  const ruralReferences = filterRuralReferencesByXtecSstt(selectedSstt);
+  if (errorDetectionSubtitleEl) {
+    errorDetectionSubtitleEl.textContent = `Escoles rurals de ${ssttLabel}, resoltes amb Dades Obertes i comparades amb el fitxer d'entrada.`;
+  }
+  if (errorDetectionCountEl) {
+    errorDetectionCountEl.textContent = 'Consultant Dades Obertes...';
+  }
+  errorDetectionTableEl.innerHTML = `
+    <div class="rounded-xl border border-sky-200 bg-sky-50 p-6 text-center text-sky-900">
+      <p class="text-lg font-semibold">Consultant codis de centre a Dades Obertes...</p>
+    </div>
+  `;
+
+  const ruralRows = await getRuralDetectionRows(rows, selectedSstt);
+  if (requestId !== state.ruralRenderRequestId || state.activeView !== 'ERROR_DETECTION' || state.errorDetectionSubView !== 'RURAL_ZER') return;
+  const matchedRows = ruralRows.filter((item) => item.inCsv);
+  const codeRows = ruralRows.filter((item) => item.code);
+  const errorRows = ruralRows.filter((item) => !item.code || !item.inCsv);
+  const okRows = ruralRows.filter((item) => item.inCsv);
+  const evalisaNoRows = okRows.filter((item) => getEvalisaBucket(item.evalisaNeeded) === 'NO');
+  const evalisaSiRows = okRows.filter((item) => getEvalisaBucket(item.evalisaNeeded) === 'SI');
+  const evalisaOtherRows = okRows.filter((item) => getEvalisaBucket(item.evalisaNeeded) === 'ALTRES');
+
+  if (errorDetectionCountEl) {
+    errorDetectionCountEl.innerHTML = `
+      <span class="management-count-panel">
+        <span class="management-count-number text-5xl font-extrabold leading-none">${matchedRows.length}</span>
+        <span class="management-count-label mt-1 block text-base">escoles rurals al CSV</span>
+      </span>
+    `;
+  }
+
+  const alertHtml = errorRows.length
+    ? `
+      <div class="rural-alert mb-4">
+        <p class="font-semibold">Hi ha ${errorRows.length} escoles amb error o dubte.</p>
+        <p>Revisa les files marcades a la columna “Error”. El codi es resol amb Dades Obertes a partir del nom i la població de XTEC, i després es compara amb el CSV.</p>
+      </div>
+    `
+    : '';
+
+  if (!ruralRows.length) {
+    errorDetectionTableEl.innerHTML = `
+      <div class="rounded-xl border border-amber-200 bg-amber-50 p-6 text-center text-amber-900">
+        <p class="text-lg font-semibold">No hi ha dades per comparar.</p>
+      </div>
+    `;
+    return;
+  }
+
+  const renderTable = (title, items, emptyText) => {
+    const body = items.map((item, index) => `
+    <tr class="${index % 2 === 0 ? 'management-row-even' : 'management-row-odd'} ${item.alert ? 'rural-row-alert' : ''}">
+      <td>${escapeHtml(item.code || '-')}</td>
+      <td class="font-medium text-slate-800">${escapeHtml(item.name || '-')}</td>
+      <td>${escapeHtml(item.sstt || '-')}</td>
+      <td class="text-center">${escapeHtml(item.evalisaNeeded || '-')}</td>
+      <td>${escapeHtml(item.openDataName || '-')}</td>
+      <td>${escapeHtml(item.openDataTown || '-')}</td>
+      <td class="text-center">${escapeHtml(item.openDataResultCount ?? '-')}</td>
+      <td>${escapeHtml(item.sourceName)}</td>
+      <td>${escapeHtml(item.sourceTown || '-')}</td>
+      <td>${escapeHtml(item.sourceTerritory)}</td>
+      <td>${escapeHtml(item.sourceSstt || '-')}</td>
+      <td class="text-center">${escapeHtml(item.status)}</td>
+      <td>${escapeHtml(item.alert)}</td>
+    </tr>
+  `).join('');
+
+    return `
+      <section class="rural-result-section">
+        <h3 class="rural-result-title">${escapeHtml(title)} <span>${items.length}</span></h3>
+        ${items.length
+          ? `
+            <table class="management-table rural-detection-table text-left text-xs">
+              <thead>
+                <tr>
+                  <th>Codi</th>
+                  <th>Nom escola al CSV</th>
+                  <th>SSTT</th>
+                  <th class="text-center">e-Valisa necessària</th>
+                  <th>Nom Dades Obertes</th>
+                  <th>Població Dades Obertes</th>
+                  <th class="text-center">Resultats fitxa</th>
+                  <th>Nom rural XTEC</th>
+                  <th>Població XTEC</th>
+                  <th>Territori XTEC</th>
+                  <th>ST XTEC</th>
+                  <th class="text-center">Resultat</th>
+                  <th>Error</th>
+                </tr>
+              </thead>
+              <tbody>${body}</tbody>
+            </table>
+          `
+          : `<div class="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">${escapeHtml(emptyText)}</div>`}
+      </section>
+    `;
+  };
+
+  errorDetectionTableEl.innerHTML = `
+    ${alertHtml}
+    <div class="rural-summary mb-3">
+      <span>${okRows.length} coincidències clares</span>
+      <span>${evalisaNoRows.length} e-Valisa necessària = NO</span>
+      <span>${evalisaSiRows.length} e-Valisa necessària = SI</span>
+      <span>${errorRows.length} amb error o dubte</span>
+      <span>${codeRows.length} codis resolts a Dades Obertes</span>
+      <span>${ruralReferences.length} escoles XTEC consultades</span>
+      <span>Font: <a href="${RURAL_SCHOOL_SOURCE_URL}" target="_blank" rel="noopener noreferrer">XTEC - Webs d'escoles</a></span>
+    </div>
+    ${renderTable('e-Valisa necessària = SI', evalisaSiRows, 'No hi ha escoles rurals amb e-Valisa necessària = SI.')}
+    ${renderTable('e-Valisa necessària = NO', evalisaNoRows, 'No hi ha escoles rurals amb e-Valisa necessària = NO.')}
+    ${evalisaOtherRows.length ? renderTable('e-Valisa necessària sense valor clar', evalisaOtherRows, '') : ''}
+    ${renderTable('Errors o dubtes', errorRows, 'No hi ha errors ni dubtes.')}
+  `;
+}
+
 function renderErrorDetectionView() {
   if (!errorDetectionSectionEl || !errorDetectionTableEl) return;
 
@@ -954,7 +1652,19 @@ function renderErrorDetectionView() {
   const ssttLabel = !selectedSstt ? 'cap ST seleccionat' : (selectedSstt === 'ALL' ? 'tots els ST' : `ST ${selectedSstt}`);
   const isPendingSubView = state.errorDetectionSubView === 'PENDING_0_4';
   const isPendingNoEvalisaSubView = state.errorDetectionSubView === 'PENDING_5_NO_EVALISA';
+  const isRuralSubView = state.errorDetectionSubView === 'RURAL_ZER';
+  const isSentEvalisaCheckSubView = state.errorDetectionSubView === 'SENT_EVALISA_CHECK';
   const showPrimaryCommentColumns = state.educationStage === 'PRIMARIA';
+
+  if (isRuralSubView) {
+    renderRuralDetectionView(rows, selectedSstt, ssttLabel);
+    return;
+  }
+  if (isSentEvalisaCheckSubView) {
+    renderSentEvalisaCheckView(filteredRows, ssttLabel);
+    return;
+  }
+
   let detectedRows = allDetectedRows.filter((item) => item.evalisaNeededBool === false && item.assessorActionBool === true);
   if (isPendingSubView) {
     detectedRows = allDetectedRows.filter((item) => item.evalisaNeededBool === true && item.remaining >= 0 && item.remaining <= 4);
@@ -962,7 +1672,7 @@ function renderErrorDetectionView() {
     detectedRows = allDetectedRows.filter((item) => (
       item.evalisaNeededBool === false
       && item.remaining >= 5
-      && !isZerCentreName(item.name)
+      && !isRuralSchoolErrorDetectionItem(item)
       && !isRedEsExcedentReason(item.reason)
     ));
   }
@@ -972,7 +1682,7 @@ function renderErrorDetectionView() {
     if (isPendingSubView) {
       subtitle = `Centres de ${ssttLabel} amb e-Valisa necessària = SI i entre 0 i 4 equips pendents de retirar.`;
     } else if (isPendingNoEvalisaSubView) {
-      subtitle = `Centres de ${ssttLabel} amb e-Valisa necessària = NO i 5 o més equips pendents de retirar, excloent les ZER i els casos Red.es.`;
+      subtitle = `Centres de ${ssttLabel} amb e-Valisa necessària = NO i 5 o més equips pendents de retirar, excloent les ZER, les escoles rurals indicades a les observacions i els casos Red.es.`;
     }
     errorDetectionSubtitleEl.textContent = subtitle;
   }
@@ -1870,6 +2580,23 @@ errorDetectionPendingNoEvalisaBtn?.addEventListener('click', () => {
 });
 errorDetectionAdvisorBtn?.addEventListener('click', () => {
   state.errorDetectionSubView = 'ADVISOR_YES';
+  if (state.activeView === 'ERROR_DETECTION') applyActiveView();
+});
+errorDetectionRuralBtn?.addEventListener('click', () => {
+  state.errorDetectionSubView = 'RURAL_ZER';
+  if (state.activeView === 'ERROR_DETECTION') applyActiveView();
+});
+errorDetectionSentCheckBtn?.addEventListener('click', () => {
+  state.errorDetectionSubView = 'SENT_EVALISA_CHECK';
+  if (state.activeView === 'ERROR_DETECTION') applyActiveView();
+});
+sentEvalisaInput?.addEventListener('change', async (event) => {
+  const [file] = event.target.files || [];
+  if (!file) return;
+  const { names } = await readFirstColumnCsvWithEncodingFallback(file);
+  state.sentEvalisaCheckByStage[state.educationStage] = { fileName: file.name, names };
+  sentEvalisaInput.value = '';
+  state.errorDetectionSubView = 'SENT_EVALISA_CHECK';
   if (state.activeView === 'ERROR_DETECTION') applyActiveView();
 });
 
