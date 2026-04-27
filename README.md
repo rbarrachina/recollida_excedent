@@ -61,7 +61,6 @@ La taula d'origen utilitzada per obtenir el GeoJSON complet és `ne55-4fc5`. Si 
 - `chartjs-plugin-datalabels` es distribueix sota llicència `MIT`.
 - `Leaflet` es distribueix sota llicència `BSD 2-Clause`.
 - Les dades i tiles de mapa d'`OpenStreetMap` requereixen atribució visible. L'aplicació mostra l'atribució al mapa i aquestes dades estan subjectes a la llicència `ODbL`. Més informació a `https://www.openstreetmap.org/copyright`.
-- La icona `CC BY-SA` carregada des de Wikimedia Commons es fa servir com a recurs gràfic informatiu. Consulta la fitxa del recurs per als detalls d'ús i marca: `https://commons.wikimedia.org/wiki/File:CC_BY-SA_icon.svg`.
 
 ## Autor
 
@@ -69,4 +68,4 @@ Rafa Barrachina
 
 ## Llicència
 
-CC BY-SA 4.0. Consulta el fitxer `LICENSE`.
+GNU AGPL-3.0. Consulta el fitxer `LICENSE`.

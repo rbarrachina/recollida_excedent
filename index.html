@@ -8,7 +8,7 @@
     <meta http-equiv="Expires" content="0" />
     <title>Resum de discrepàncies d'excedent PEDC</title>
     <script>
-      window.APP_ASSET_VERSION = '44';
+      window.APP_ASSET_VERSION = '45';
       document.write(`<link rel="stylesheet" href="./src/styles.css?v=${window.APP_ASSET_VERSION}" />`);
     </script>
     <link
@@ -231,26 +231,51 @@
         </div>
       </div>
 
-      <div id="aboutModal" class="fixed inset-0 hidden items-center justify-center bg-slate-900/40 p-4" style="z-index: 1000;">
-        <div class="about-modal-card w-full max-w-md p-6">
-          <div class="mb-5 flex items-center justify-between">
-            <div class="flex items-center gap-3">
-              <span class="about-chip">i</span>
-              <h3 class="text-lg font-semibold text-slate-900">Informació de l'aplicació</h3>
-            </div>
-            <button id="closeAboutModalBtn" type="button" class="rounded-md border border-slate-300 px-2 py-1 text-slate-600 hover:bg-white">Tanca</button>
+      <div id="aboutModal" class="fixed inset-0 hidden items-center justify-center bg-emerald-950/35 p-4" style="z-index: 1000;">
+        <div class="about-modal-card w-full max-w-md">
+          <div class="about-modal-header">
+            <h3 class="about-modal-title">Informació de l'aplicació</h3>
+            <button id="closeAboutModalBtn" type="button" class="about-close-btn">Tancar</button>
           </div>
-          <div class="space-y-3 text-sm text-slate-700">
-            <div class="about-item"><span class="font-semibold text-slate-900">Autor:</span> Rafa Barrachina</div>
-            <div class="about-item license-row">
-              <span><span class="font-semibold text-slate-900">Llicència:</span> CC BY-SA 4.0</span>
+          <div class="about-modal-body">
+            <div class="about-item">
+              <span><span class="about-label">Autor:</span> Rafa Barrachina</span>
+              <a
+                class="about-icon-link"
+                href="https://github.com/rbarrachina/recollida_excedent"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Obre el repositori a GitHub"
+                title="GitHub"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path
+                    fill="currentColor"
+                    d="M12 2C6.48 2 2 6.59 2 12.25c0 4.53 2.87 8.37 6.84 9.73.5.1.68-.22.68-.49 0-.24-.01-1.05-.01-1.91-2.78.62-3.37-1.21-3.37-1.21-.45-1.19-1.11-1.5-1.11-1.5-.91-.64.07-.63.07-.63 1 .07 1.53 1.06 1.53 1.06.89 1.56 2.34 1.11 2.91.85.09-.66.35-1.11.63-1.37-2.22-.26-4.56-1.14-4.56-5.06 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.31.1-2.71 0 0 .84-.28 2.75 1.05A9.37 9.37 0 0 1 12 6.96c.85 0 1.7.12 2.5.35 1.91-1.33 2.75-1.05 2.75-1.05.55 1.4.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.93-2.34 4.79-4.57 5.05.36.32.68.94.68 1.9 0 1.37-.01 2.47-.01 2.81 0 .27.18.59.69.49A10.16 10.16 0 0 0 22 12.25C22 6.59 17.52 2 12 2Z"
+                  />
+                </svg>
+              </a>
+            </div>
+            <div class="about-item">
+              <span><span class="about-label">Llicència:</span> AGPL v3</span>
               <img
-                class="license-icon"
-                src="https://upload.wikimedia.org/wikipedia/commons/e/e5/CC_BY-SA_icon.svg"
-                alt="CC BY-SA"
+                class="about-license-logo"
+                src="https://www.gnu.org/graphics/agplv3-with-text-162x68.png"
+                alt="AGPL v3"
               />
             </div>
-            <div class="about-item"><span class="font-semibold text-slate-900">Any:</span> 2026</div>
+            <div class="about-item">
+              <span><span class="about-label">Tercers:</span></span>
+              <a
+                class="about-readme-link"
+                href="https://github.com/rbarrachina/recollida_excedent#llic%C3%A8ncies-de-tercers"
+                target="_blank"
+                rel="noopener noreferrer"
+              >consulta el README</a>
+            </div>
+            <div class="about-item">
+              <span><span class="about-label">Any:</span> 2026</span>
+            </div>
           </div>
         </div>
       </div>
